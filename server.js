@@ -13,69 +13,6 @@ import { dirname, join } from 'node:path';
 import { existsSync, readFileSync } from 'node:fs';
 import { appleCrayonColorsHexStrings } from './src/utils/color/color.js';
 
-// Load environment variables from .env file if it exists (development only)
-// Using manual parsing instead of dotenv package to avoid any stdout output
-// that would interfere with STDIO MCP protocol communication
-// 
-// IMPORTANT: For .mcpb packages, configuration comes from manifest.json.
-// The .env file is a DEVELOPMENT-ONLY convenience and is NOT included in packages.
-// For distributed packages, use manifest.json env defaults or system environment variables.
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
-// Try multiple locations for .env file:
-// 1. Same directory as the script (works in development)
-// 2. Parent directory (works if bundled in dist/)
-// 3. Current working directory (fallback)
-const envPaths = [
-  join(__dirname, '.env'),           // Same dir as script
-  join(__dirname, '..', '.env'),    // Parent dir (for dist/hello3dmcp-server.js)
-  join(process.cwd(), '.env')       // Current working directory
-];
-
-let envPath = null;
-for (const path of envPaths) {
-  if (existsSync(path)) {
-    envPath = path;
-    break;
-  }
-}
-
-if (envPath) {
-  try {
-    // Manually parse .env file to avoid any potential stdout output from dotenv package
-    const envContent = readFileSync(envPath, 'utf-8');
-    const lines = envContent.split('\n');
-    
-    for (const line of lines) {
-      // Skip comments and empty lines
-      const trimmed = line.trim();
-      if (!trimmed || trimmed.startsWith('#')) continue;
-      
-      // Parse KEY=VALUE format
-      const match = trimmed.match(/^([^=:#]+)=(.*)$/);
-      if (match) {
-        const key = match[1].trim();
-        let value = match[2].trim();
-        
-        // Remove quotes if present
-        if ((value.startsWith('"') && value.endsWith('"')) || 
-            (value.startsWith("'") && value.endsWith("'"))) {
-          value = value.slice(1, -1);
-        }
-        
-        // Only set if not already in environment (don't override)
-        if (!process.env[key]) {
-          process.env[key] = value;
-        }
-      }
-    }
-  } catch (error) {
-    // Completely silent - .env file is optional and errors should not break the server
-    // Any output here would interfere with STDIO MCP protocol communication
-  }
-}
-
 // Parse command line arguments
 function parseCommandLineArgs() {
   const args = {};
@@ -91,20 +28,18 @@ Usage: node server.js [options]
 
 Options:
   --browser-url, -u <url>    Browser URL for the 3D app (e.g., https://your-app.netlify.app)
-                             Overrides BROWSER_URL environment variable and .env file
+                             Overrides BROWSER_URL environment variable
   --help, -h                 Show this help message
 
 Environment Variables:
   BROWSER_URL                Browser URL (used if --browser-url not provided)
-                             Can also be set in .env file
   MCP_PORT                   MCP server port (default: 3000)
   WS_PORT                    WebSocket server port (default: 3001)
 
 Configuration Priority:
   1. Command line argument (--browser-url)
   2. Environment variable (BROWSER_URL)
-  3. .env file (BROWSER_URL)
-  4. Default (http://localhost:5173)
+  3. Default (http://localhost:5173)
 
 Examples:
   node server.js --browser-url https://my-app.netlify.app
@@ -122,8 +57,8 @@ const MCP_PORT = process.env.MCP_PORT ? parseInt(process.env.MCP_PORT, 10) : 300
 const WS_PORT = process.env.WS_PORT ? parseInt(process.env.WS_PORT, 10) : 3001;
 // Browser URL for the 3D app (Netlify deployment)
 // Priority: 1) Command line argument (--browser-url), 2) Environment variable (BROWSER_URL), 
-//           3) .env file (BROWSER_URL), 4) Default (localhost)
-// Note: dotenv.config() was called earlier, so process.env.BROWSER_URL may come from .env file
+//           3) Default (localhost)
+// For .mcpb packages, configuration comes from manifest.json env defaults
 const BROWSER_URL = cliArgs.browserUrl || process.env.BROWSER_URL || 'http://localhost:5173';
 
 /**
@@ -185,7 +120,7 @@ wss.on('error', (error) => {
     console.error(`   To fix this:`);
     console.error(`   1. Find the process using port ${WS_PORT}: lsof -i :${WS_PORT}`);
     console.error(`   2. Kill it: kill <PID>`);
-    console.error(`   3. Or change WS_PORT in your environment or .env file\n`);
+    console.error(`   3. Or change WS_PORT in your environment\n`);
     process.exit(1);
   } else {
     console.error('WebSocket server error:', error);

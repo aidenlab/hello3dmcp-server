@@ -11,9 +11,6 @@ lerna-debug.log*
 node_modules
 package-lock.json
 
-# Environment variables
-.env
-
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

@@ -4,6 +4,7 @@
 			"name": "hello3dmcp-server",
 			"path": "."
 		},
+		// Note: Before opening this workspace, ensure the igvweb-mcp project is on the 'dat-get-project-overview' branch
 		{
 			"name": "igvweb-mcp",
 			"path": "/Users/turner/IGVDevelopment/igvweb-mcp"
