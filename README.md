@@ -99,9 +99,34 @@ node server.js --help
 | **Claude Desktop** | Free | ✅ Yes (subprocess mode) | ✅ Yes (HTTP mode + tunnel) | Desktop app with Claude |
 | **ChatGPT** | Paid (Plus) | ❌ No | ✅ Yes (tunnel needed) | OpenAI integration |
 
-### Claude Desktop (Subprocess Mode - Recommended)
+### Claude Desktop Installation
 
-This is the simplest setup - Claude Desktop manages the server automatically.
+**Option 1: MCP Package (`.mcpb`) - Recommended**
+
+The simplest installation method - just install the package file:
+
+1. **Build the package:**
+   ```bash
+   npm run build
+   ```
+   This creates `hello3dmcp-server.mcpb` in your project root.
+
+2. **Install in Claude Desktop:**
+   - Open Claude Desktop → Settings → Extensions → Advanced Settings
+   - Click "Install Extension"
+   - Select the `hello3dmcp-server.mcpb` file
+   - Restart Claude Desktop
+
+3. **Get connection URL:**
+   - Ask Claude: "How do I connect to the 3D app?" or "Get browser URL"
+   - Claude will provide a URL with your unique session ID
+   - Open that URL in your browser
+
+**Benefits:** No manual configuration needed, self-contained package, easy updates.
+
+**Option 2: Manual Configuration (For Development)**
+
+For development or custom setups, see the detailed guide: [Claude Desktop Setup Guide](docs/setup-guides/claude-desktop-setup.md)
 
 1. **Make sure server is NOT already running** (Claude Desktop will start it)
 
@@ -222,10 +247,16 @@ The MCP Inspector is a developer tool for testing and debugging MCP servers. It 
 
 *Example: MCP Inspector connected to the server, showing tools being tested.*
 
-**To use with your MCP server:**
+**Testing Options:**
 
-1. **Make sure your MCP server is running:**
+You can test either the source code (development) or the bundled version (production):
+
+**Option 1: Test Source Code (Development)**
+
+1. **Start the server from source:**
    ```bash
+   npm start
+   # or
    node server.js
    ```
    Server should be running on `http://localhost:3000/mcp`
@@ -234,6 +265,29 @@ The MCP Inspector is a developer tool for testing and debugging MCP servers. It 
    ```bash
    npx @modelcontextprotocol/inspector http://localhost:3000/mcp
    ```
+
+**Option 2: Test Bundled Version (Production)**
+
+1. **Build the bundle:**
+   ```bash
+   npm run build:bundle
+   ```
+   This creates `dist/hello3dmcp-server.js`
+
+2. **Start the bundled server:**
+   ```bash
+   npm run start:prod
+   # or
+   node dist/hello3dmcp-server.js
+   ```
+   Server should be running on `http://localhost:3000/mcp`
+
+3. **Start the MCP Inspector:**
+   ```bash
+   npx @modelcontextprotocol/inspector http://localhost:3000/mcp
+   ```
+
+**Using the Inspector:**
 
 3. **Open the Inspector UI:**
    - The inspector will start a web interface (usually on `http://localhost:5173`)

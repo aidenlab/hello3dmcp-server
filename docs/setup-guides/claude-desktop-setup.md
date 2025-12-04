@@ -12,7 +12,101 @@ Claude Desktop is Anthropic's free desktop application that supports MCP servers
 
 ---
 
-## Connection Modes
+## Installation Methods
+
+Claude Desktop supports **two installation methods**:
+
+1. **MCP Package (`.mcpb`)** - Simplest method, recommended for distribution
+2. **Manual Configuration** - For development or custom setups
+
+---
+
+## Option 1: MCP Package Installation (`.mcpb`) - Recommended
+
+This is the **simplest installation method** - just install the package file and Claude Desktop handles everything automatically.
+
+### Prerequisites
+
+- Claude Desktop installed (download from https://claude.ai/download)
+- The `hello3dmcp-server.mcpb` package file (created by running `npm run build`)
+
+### Step-by-Step Installation
+
+1. **Build the package** (if you haven't already):
+   ```bash
+   npm run build
+   ```
+   This creates `hello3dmcp-server.mcpb` in your project root.
+
+2. **Install in Claude Desktop:**
+   - Open Claude Desktop
+   - Go to **Settings** → **Extensions** → **Advanced Settings**
+   - Click **"Install Extension"** button
+   - Select the `hello3dmcp-server.mcpb` file
+   - Claude Desktop will automatically extract and configure the server
+
+3. **Restart Claude Desktop:**
+   - Quit Claude Desktop completely
+   - Reopen Claude Desktop
+   - The MCP server will start automatically
+
+4. **Verify the connection:**
+   - In Claude Desktop, ask: "What tools do you have available?"
+   - Claude should list your MCP tools (e.g., `change_model_color`, `change_model_size`, etc.)
+
+5. **Configure the browser URL (if needed):**
+   - The package includes default configuration in `manifest.json`:
+     - `BROWSER_URL`: `http://localhost:5173` (default)
+     - `MCP_PORT`: `3000`
+     - `WS_PORT`: `3001`
+   - To override defaults, set system environment variables before starting Claude Desktop:
+     ```bash
+     export BROWSER_URL=https://your-app.netlify.app
+     ```
+   - Or modify the `manifest.json` before building the package
+
+6. **Start your 3D app:**
+   ```bash
+   npm run dev
+   ```
+   This starts the development server on `http://localhost:5173`
+
+7. **Connect to the 3D app:**
+   - Ask Claude Desktop: "How do I connect to the 3D app?" or "Get browser URL"
+   - Claude will provide a URL with your unique session ID
+   - Open that URL in your browser
+
+### Benefits of `.mcpb` Installation
+
+- **No manual configuration** - No need to edit config files or specify paths
+- **Self-contained** - All dependencies bundled, no Node.js/npm required
+- **Easy updates** - Just rebuild and reinstall the package
+- **Clean installation** - Everything managed by Claude Desktop
+
+### Troubleshooting `.mcpb` Installation
+
+#### Package Not Installing
+- Verify the `.mcpb` file was created successfully (`npm run build`)
+- Check that Claude Desktop is up to date (supports `.mcpb` packages)
+- Try restarting Claude Desktop
+
+#### Server Not Starting
+- Check Claude Desktop logs: `~/Library/Logs/Claude/mcp-server-hello3dmcp-server.log` (macOS)
+- Verify ports 3000 and 3001 are available
+- Check that Node.js is installed (required to run the bundled server)
+
+#### Tools Not Appearing
+- Restart Claude Desktop completely
+- Verify the package installed successfully in Settings → Extensions
+- Check logs for errors
+
+---
+
+## Option 2: Manual Configuration (For Development)
+
+For development or custom setups, you can configure Claude Desktop manually.
+
+### Connection Modes
 
 Claude Desktop supports **two connection modes**:
 
@@ -21,7 +115,7 @@ Claude Desktop supports **two connection modes**:
 
 ---
 
-## Option 1: Subprocess Mode (Recommended for Localhost)
+### Option 2A: Subprocess Mode (Recommended for Localhost)
 
 This is the simplest setup - Claude Desktop will start and manage your server automatically.
 

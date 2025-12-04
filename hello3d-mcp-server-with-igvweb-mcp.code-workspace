@@ -1,0 +1,18 @@
+{
+	"folders": [
+		{
+			"name": "hello3dmcp-server",
+			"path": "."
+		},
+		{
+			"name": "igvweb-mcp",
+			"path": "/Users/turner/IGVDevelopment/igvweb-mcp"
+		}
+	],
+	"settings": {
+		"files.exclude": {
+			"**/node_modules": true
+		}
+	}
+}
+

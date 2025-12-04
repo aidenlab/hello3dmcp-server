@@ -13,14 +13,35 @@ import { dirname, join } from 'node:path';
 import { existsSync, readFileSync } from 'node:fs';
 import { appleCrayonColorsHexStrings } from './src/utils/color/color.js';
 
-// Load environment variables from .env file if it exists
+// Load environment variables from .env file if it exists (development only)
 // Using manual parsing instead of dotenv package to avoid any stdout output
 // that would interfere with STDIO MCP protocol communication
+// 
+// IMPORTANT: For .mcpb packages, configuration comes from manifest.json.
+// The .env file is a DEVELOPMENT-ONLY convenience and is NOT included in packages.
+// For distributed packages, use manifest.json env defaults or system environment variables.
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const envPath = join(__dirname, '.env');
 
-if (existsSync(envPath)) {
+// Try multiple locations for .env file:
+// 1. Same directory as the script (works in development)
+// 2. Parent directory (works if bundled in dist/)
+// 3. Current working directory (fallback)
+const envPaths = [
+  join(__dirname, '.env'),           // Same dir as script
+  join(__dirname, '..', '.env'),    // Parent dir (for dist/hello3dmcp-server.js)
+  join(process.cwd(), '.env')       // Current working directory
+];
+
+let envPath = null;
+for (const path of envPaths) {
+  if (existsSync(path)) {
+    envPath = path;
+    break;
+  }
+}
+
+if (envPath) {
   try {
     // Manually parse .env file to avoid any potential stdout output from dotenv package
     const envContent = readFileSync(envPath, 'utf-8');

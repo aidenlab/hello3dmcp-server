@@ -9,7 +9,11 @@
   },
   "scripts": {
     "start": "node server.js",
-    "mcp:server": "node server.js"
+    "mcp:server": "node server.js",
+    "build": "node esbuild.config.js && node build-mcpb.js",
+    "build:bundle": "node esbuild.config.js",
+    "build:package": "node build-mcpb.js",
+    "start:prod": "node dist/hello3dmcp-server.js"
   },
   "keywords": [
     "mcp",
@@ -24,9 +28,12 @@
     "@modelcontextprotocol/sdk": "^1.22.0",
     "cors": "^2.8.5",
     "express": "^5.1.0",
-    "three": "^0.169.0",
     "ws": "^8.18.0",
     "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "archiver": "^7.0.1",
+    "esbuild": "^0.19.0"
   }
 }
 
