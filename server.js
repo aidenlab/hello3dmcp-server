@@ -262,14 +262,14 @@ function waitForStateResponse(requestId, timeout = STATE_QUERY_TIMEOUT) {
 }
 
 // Query state from browser (with optional force refresh)
-async function queryStateFromBrowser(sessionId, forceRefresh = false) {
+async function queryStateFromBrowser(sessionId) {
   const requestId = generateRequestId();
   
   // Send request to browser
   const sent = sendToSession(sessionId, {
     type: 'requestState',
     requestId: requestId,
-    forceRefresh: forceRefresh
+    forceRefresh: false
   });
   
   if (!sent) {
@@ -280,45 +280,27 @@ async function queryStateFromBrowser(sessionId, forceRefresh = false) {
   return await waitForStateResponse(requestId);
 }
 
-// Get state (cached or fresh)
-async function getState(sessionId, forceRefresh = false) {
+// Get state (always queries browser, cache only as fallback)
+async function getState(sessionId) {
   let state;
   let source;
   let wasCached = false;
   
-  // If force refresh, always query browser
-  if (forceRefresh) {
-    try {
-      state = await queryStateFromBrowser(sessionId, true);
-      source = 'fresh';
-    } catch (error) {
-      // If force refresh fails, fall back to cache if available
-      const cached = sessionStateCache.get(sessionId);
-      if (cached) {
-        console.warn(`Force refresh failed for session ${sessionId}, returning cached state: ${error.message}`);
-        state = cached.state;
-        source = 'cache';
-        wasCached = true;
-      } else {
-        throw error;
-      }
-    }
-  } else {
-    // Otherwise, return cached state if available
+  // Always query browser for current state
+  try {
+    state = await queryStateFromBrowser(sessionId);
+    source = 'fresh';
+  } catch (error) {
+    // If query fails, fall back to cache if available (browser may be disconnected)
     const cached = sessionStateCache.get(sessionId);
     if (cached) {
+      console.warn(`Browser query failed for session ${sessionId}, returning cached state: ${error.message}`);
       state = cached.state;
       source = 'cache';
       wasCached = true;
     } else {
-      // No cache, query browser
-      try {
-        state = await queryStateFromBrowser(sessionId, false);
-        source = 'fresh';
-      } catch (error) {
-        // If query fails and no cache, throw error
-        throw new Error(`Unable to retrieve state: ${error.message}. Browser may be disconnected.`);
-      }
+      // No cache available, throw error
+      throw new Error(`Unable to retrieve state: ${error.message}. Browser may be disconnected.`);
     }
   }
   
@@ -334,11 +316,11 @@ async function getState(sessionId, forceRefresh = false) {
 }
 
 // Format state response with metadata for tool responses
-function formatStateResponse(value, propertyName, sessionId, forceRefresh, metadata) {
+function formatStateResponse(value, propertyName, sessionId, metadata) {
   const timestamp = metadata.timestamp;
   const source = metadata.source;
   const stalenessWarning = metadata.wasCached 
-    ? ' (may be stale if user manually interacted)' 
+    ? ' (using cached state - browser may be disconnected)' 
     : '';
   
   return `${propertyName}: ${value} (queried at ${timestamp}, source: ${source}${stalenessWarning})`;
@@ -347,7 +329,7 @@ function formatStateResponse(value, propertyName, sessionId, forceRefresh, metad
 // Helper function to query fresh state before relative manipulations
 async function queryFreshStateForManipulation(sessionId) {
   try {
-    const { state } = await getState(sessionId, true); // Always force refresh
+    const { state } = await getState(sessionId);
     return state;
   } catch (error) {
     console.warn(`Failed to query fresh state before manipulation: ${error.message}`);
@@ -571,15 +553,9 @@ mcpServer.registerTool(
     description: 'Get the current scene background color as a hex color code (e.g., "#000000"). ' +
       'Query this before relative color changes to ensure accuracy. ' +
       'For absolute changes, you may use recently queried state from context if no manual interactions occurred.',
-    inputSchema: {
-      forceRefresh: z.boolean().optional().describe(
-        'Force refresh from browser (defaults to false, uses cache). ' +
-        'Set to true if: user manually interacted with the 3D app, state might have changed, ' +
-        'or accuracy is critical. Use false (default) if state was recently queried and no manual interactions occurred.'
-      )
-    }
+    inputSchema: {}
   },
-  async ({ forceRefresh = false }) => {
+  async () => {
     const sessionId = getCurrentSessionId();
     if (!sessionId) {
       return {
@@ -594,14 +570,14 @@ mcpServer.registerTool(
     }
 
     try {
-      const { state, metadata } = await getState(sessionId, forceRefresh);
+      const { state, metadata } = await getState(sessionId);
       const color = state.background || '#000000';
       
       return {
         content: [
           {
             type: 'text',
-            text: formatStateResponse(color, 'Background color', sessionId, forceRefresh, metadata)
+            text: formatStateResponse(color, 'Background color', sessionId, metadata)
           }
         ]
       };
@@ -1142,15 +1118,9 @@ mcpServer.registerTool(
     description: 'Get the current key light position in camera-centric spherical coordinates. ' +
       'Query this before relative position changes (e.g., "rotate light 10 degrees") to ensure accuracy. ' +
       'For absolute changes, you may use recently queried state from context if no manual interactions occurred.',
-    inputSchema: {
-      forceRefresh: z.boolean().optional().describe(
-        'Force refresh from browser (defaults to false, uses cache). ' +
-        'Set to true if: user manually interacted with the 3D app, state might have changed, ' +
-        'or accuracy is critical. Use false (default) if state was recently queried and no manual interactions occurred.'
-      )
-    }
+    inputSchema: {}
   },
-  async ({ forceRefresh = false }) => {
+  async () => {
     const sessionId = getCurrentSessionId();
     if (!sessionId) {
       return {
@@ -1165,7 +1135,7 @@ mcpServer.registerTool(
     }
 
     try {
-      const { state, metadata } = await getState(sessionId, forceRefresh);
+      const { state, metadata } = await getState(sessionId);
       const position = state.keyLight?.position || { azimuth: 0, elevation: 0, distance: 0 };
       const positionText = `azimuth ${position.azimuth}°, elevation ${position.elevation}°, distance ${position.distance}`;
       
@@ -1173,7 +1143,7 @@ mcpServer.registerTool(
         content: [
           {
             type: 'text',
-            text: formatStateResponse(positionText, 'Key light position', sessionId, forceRefresh, metadata)
+            text: formatStateResponse(positionText, 'Key light position', sessionId, metadata)
           }
         ]
       };
@@ -1198,15 +1168,9 @@ mcpServer.registerTool(
     description: 'Get the current key light intensity value (0.0 or higher). ' +
       'Query this before relative intensity changes (e.g., "increase by 0.5") to ensure accuracy. ' +
       'For absolute changes, you may use recently queried state from context if no manual interactions occurred.',
-    inputSchema: {
-      forceRefresh: z.boolean().optional().describe(
-        'Force refresh from browser (defaults to false, uses cache). ' +
-        'Set to true if: user manually interacted with the 3D app, state might have changed, ' +
-        'or accuracy is critical. Use false (default) if state was recently queried and no manual interactions occurred.'
-      )
-    }
+    inputSchema: {}
   },
-  async ({ forceRefresh = false }) => {
+  async () => {
     const sessionId = getCurrentSessionId();
     if (!sessionId) {
       return {
@@ -1221,14 +1185,14 @@ mcpServer.registerTool(
     }
 
     try {
-      const { state, metadata } = await getState(sessionId, forceRefresh);
+      const { state, metadata } = await getState(sessionId);
       const intensity = state.keyLight?.intensity ?? 0;
       
       return {
         content: [
           {
             type: 'text',
-            text: formatStateResponse(intensity.toString(), 'Key light intensity', sessionId, forceRefresh, metadata)
+            text: formatStateResponse(intensity.toString(), 'Key light intensity', sessionId, metadata)
           }
         ]
       };
@@ -1253,15 +1217,9 @@ mcpServer.registerTool(
     description: 'Get the current key light color as a hex color code (e.g., "#ffffff"). ' +
       'Query this before relative color changes to ensure accuracy. ' +
       'For absolute changes, you may use recently queried state from context if no manual interactions occurred.',
-    inputSchema: {
-      forceRefresh: z.boolean().optional().describe(
-        'Force refresh from browser (defaults to false, uses cache). ' +
-        'Set to true if: user manually interacted with the 3D app, state might have changed, ' +
-        'or accuracy is critical. Use false (default) if state was recently queried and no manual interactions occurred.'
-      )
-    }
+    inputSchema: {}
   },
-  async ({ forceRefresh = false }) => {
+  async () => {
     const sessionId = getCurrentSessionId();
     if (!sessionId) {
       return {
@@ -1276,14 +1234,14 @@ mcpServer.registerTool(
     }
 
     try {
-      const { state, metadata } = await getState(sessionId, forceRefresh);
+      const { state, metadata } = await getState(sessionId);
       const color = state.keyLight?.color || '#ffffff';
       
       return {
         content: [
           {
             type: 'text',
-            text: formatStateResponse(color, 'Key light color', sessionId, forceRefresh, metadata)
+            text: formatStateResponse(color, 'Key light color', sessionId, metadata)
           }
         ]
       };
@@ -1308,15 +1266,9 @@ mcpServer.registerTool(
     description: 'Get the current key light area size (width and height in units). ' +
       'Query this before relative size changes to ensure accuracy. ' +
       'For absolute changes, you may use recently queried state from context if no manual interactions occurred.',
-    inputSchema: {
-      forceRefresh: z.boolean().optional().describe(
-        'Force refresh from browser (defaults to false, uses cache). ' +
-        'Set to true if: user manually interacted with the 3D app, state might have changed, ' +
-        'or accuracy is critical. Use false (default) if state was recently queried and no manual interactions occurred.'
-      )
-    }
+    inputSchema: {}
   },
-  async ({ forceRefresh = false }) => {
+  async () => {
     const sessionId = getCurrentSessionId();
     if (!sessionId) {
       return {
@@ -1331,7 +1283,7 @@ mcpServer.registerTool(
     }
 
     try {
-      const { state, metadata } = await getState(sessionId, forceRefresh);
+      const { state, metadata } = await getState(sessionId);
       const size = state.keyLight?.size || { width: 1, height: 1 };
       const sizeText = `width ${size.width}, height ${size.height}`;
       
@@ -1339,7 +1291,7 @@ mcpServer.registerTool(
         content: [
           {
             type: 'text',
-            text: formatStateResponse(sizeText, 'Key light size', sessionId, forceRefresh, metadata)
+            text: formatStateResponse(sizeText, 'Key light size', sessionId, metadata)
           }
         ]
       };
@@ -1407,15 +1359,9 @@ mcpServer.registerTool(
     description: 'Get the current fill light position in camera-centric spherical coordinates. ' +
       'Query this before relative position changes (e.g., "rotate light 10 degrees") to ensure accuracy. ' +
       'For absolute changes, you may use recently queried state from context if no manual interactions occurred.',
-    inputSchema: {
-      forceRefresh: z.boolean().optional().describe(
-        'Force refresh from browser (defaults to false, uses cache). ' +
-        'Set to true if: user manually interacted with the 3D app, state might have changed, ' +
-        'or accuracy is critical. Use false (default) if state was recently queried and no manual interactions occurred.'
-      )
-    }
+    inputSchema: {}
   },
-  async ({ forceRefresh = false }) => {
+  async () => {
     const sessionId = getCurrentSessionId();
     if (!sessionId) {
       return {
@@ -1430,7 +1376,7 @@ mcpServer.registerTool(
     }
 
     try {
-      const { state, metadata } = await getState(sessionId, forceRefresh);
+      const { state, metadata } = await getState(sessionId);
       const position = state.fillLight?.position || { azimuth: 0, elevation: 0, distance: 0 };
       const positionText = `azimuth ${position.azimuth}°, elevation ${position.elevation}°, distance ${position.distance}`;
       
@@ -1438,7 +1384,7 @@ mcpServer.registerTool(
         content: [
           {
             type: 'text',
-            text: formatStateResponse(positionText, 'Fill light position', sessionId, forceRefresh, metadata)
+            text: formatStateResponse(positionText, 'Fill light position', sessionId, metadata)
           }
         ]
       };
@@ -1463,15 +1409,9 @@ mcpServer.registerTool(
     description: 'Get the current fill light intensity value (0.0 or higher). ' +
       'Query this before relative intensity changes (e.g., "increase by 0.5") to ensure accuracy. ' +
       'For absolute changes, you may use recently queried state from context if no manual interactions occurred.',
-    inputSchema: {
-      forceRefresh: z.boolean().optional().describe(
-        'Force refresh from browser (defaults to false, uses cache). ' +
-        'Set to true if: user manually interacted with the 3D app, state might have changed, ' +
-        'or accuracy is critical. Use false (default) if state was recently queried and no manual interactions occurred.'
-      )
-    }
+    inputSchema: {}
   },
-  async ({ forceRefresh = false }) => {
+  async () => {
     const sessionId = getCurrentSessionId();
     if (!sessionId) {
       return {
@@ -1486,14 +1426,14 @@ mcpServer.registerTool(
     }
 
     try {
-      const { state, metadata } = await getState(sessionId, forceRefresh);
+      const { state, metadata } = await getState(sessionId);
       const intensity = state.fillLight?.intensity ?? 0;
       
       return {
         content: [
           {
             type: 'text',
-            text: formatStateResponse(intensity.toString(), 'Fill light intensity', sessionId, forceRefresh, metadata)
+            text: formatStateResponse(intensity.toString(), 'Fill light intensity', sessionId, metadata)
           }
         ]
       };
@@ -1518,15 +1458,9 @@ mcpServer.registerTool(
     description: 'Get the current fill light color as a hex color code (e.g., "#ffffff"). ' +
       'Query this before relative color changes to ensure accuracy. ' +
       'For absolute changes, you may use recently queried state from context if no manual interactions occurred.',
-    inputSchema: {
-      forceRefresh: z.boolean().optional().describe(
-        'Force refresh from browser (defaults to false, uses cache). ' +
-        'Set to true if: user manually interacted with the 3D app, state might have changed, ' +
-        'or accuracy is critical. Use false (default) if state was recently queried and no manual interactions occurred.'
-      )
-    }
+    inputSchema: {}
   },
-  async ({ forceRefresh = false }) => {
+  async () => {
     const sessionId = getCurrentSessionId();
     if (!sessionId) {
       return {
@@ -1541,14 +1475,14 @@ mcpServer.registerTool(
     }
 
     try {
-      const { state, metadata } = await getState(sessionId, forceRefresh);
+      const { state, metadata } = await getState(sessionId);
       const color = state.fillLight?.color || '#ffffff';
       
       return {
         content: [
           {
             type: 'text',
-            text: formatStateResponse(color, 'Fill light color', sessionId, forceRefresh, metadata)
+            text: formatStateResponse(color, 'Fill light color', sessionId, metadata)
           }
         ]
       };
@@ -1573,15 +1507,9 @@ mcpServer.registerTool(
     description: 'Get the current fill light area size (width and height in units). ' +
       'Query this before relative size changes to ensure accuracy. ' +
       'For absolute changes, you may use recently queried state from context if no manual interactions occurred.',
-    inputSchema: {
-      forceRefresh: z.boolean().optional().describe(
-        'Force refresh from browser (defaults to false, uses cache). ' +
-        'Set to true if: user manually interacted with the 3D app, state might have changed, ' +
-        'or accuracy is critical. Use false (default) if state was recently queried and no manual interactions occurred.'
-      )
-    }
+    inputSchema: {}
   },
-  async ({ forceRefresh = false }) => {
+  async () => {
     const sessionId = getCurrentSessionId();
     if (!sessionId) {
       return {
@@ -1596,7 +1524,7 @@ mcpServer.registerTool(
     }
 
     try {
-      const { state, metadata } = await getState(sessionId, forceRefresh);
+      const { state, metadata } = await getState(sessionId);
       const size = state.fillLight?.size || { width: 1, height: 1 };
       const sizeText = `width ${size.width}, height ${size.height}`;
       
@@ -1604,7 +1532,7 @@ mcpServer.registerTool(
         content: [
           {
             type: 'text',
-            text: formatStateResponse(sizeText, 'Fill light size', sessionId, forceRefresh, metadata)
+            text: formatStateResponse(sizeText, 'Fill light size', sessionId, metadata)
           }
         ]
       };
@@ -1786,15 +1714,9 @@ mcpServer.registerTool(
     description: 'Get the current camera distance from origin (dolly position). ' +
       'Query this before relative distance changes to ensure accuracy. ' +
       'For absolute changes, you may use recently queried state from context if no manual interactions occurred.',
-    inputSchema: {
-      forceRefresh: z.boolean().optional().describe(
-        'Force refresh from browser (defaults to false, uses cache). ' +
-        'Set to true if: user manually interacted with the 3D app, state might have changed, ' +
-        'or accuracy is critical. Use false (default) if state was recently queried and no manual interactions occurred.'
-      )
-    }
+    inputSchema: {}
   },
-  async ({ forceRefresh = false }) => {
+  async () => {
     const sessionId = getCurrentSessionId();
     if (!sessionId) {
       return {
@@ -1809,14 +1731,14 @@ mcpServer.registerTool(
     }
 
     try {
-      const { state, metadata } = await getState(sessionId, forceRefresh);
+      const { state, metadata } = await getState(sessionId);
       const distance = state.camera?.distance ?? 0;
       
       return {
         content: [
           {
             type: 'text',
-            text: formatStateResponse(distance.toString(), 'Camera distance', sessionId, forceRefresh, metadata)
+            text: formatStateResponse(distance.toString(), 'Camera distance', sessionId, metadata)
           }
         ]
       };
@@ -1841,15 +1763,9 @@ mcpServer.registerTool(
     description: 'Get the current camera field of view (FOV) value. ' +
       'Query this before relative FOV changes to ensure accuracy. ' +
       'For absolute changes, you may use recently queried state from context if no manual interactions occurred.',
-    inputSchema: {
-      forceRefresh: z.boolean().optional().describe(
-        'Force refresh from browser (defaults to false, uses cache). ' +
-        'Set to true if: user manually interacted with the 3D app, state might have changed, ' +
-        'or accuracy is critical. Use false (default) if state was recently queried and no manual interactions occurred.'
-      )
-    }
+    inputSchema: {}
   },
-  async ({ forceRefresh = false }) => {
+  async () => {
     const sessionId = getCurrentSessionId();
     if (!sessionId) {
       return {
@@ -1864,14 +1780,14 @@ mcpServer.registerTool(
     }
 
     try {
-      const { state, metadata } = await getState(sessionId, forceRefresh);
+      const { state, metadata } = await getState(sessionId);
       const fov = state.camera?.fov ?? 0;
       
       return {
         content: [
           {
             type: 'text',
-            text: formatStateResponse(fov.toString(), 'Camera FOV', sessionId, forceRefresh, metadata)
+            text: formatStateResponse(fov.toString(), 'Camera FOV', sessionId, metadata)
           }
         ]
       };
@@ -1897,15 +1813,9 @@ mcpServer.registerTool(
     description: 'Get the current model rotation as Euler angles in degrees (XYZ order). Returns pitch (x), yaw (y), and roll (z) angles. ' +
       'Query this before relative rotation changes (e.g., "rotate 10 degrees") to ensure accuracy. ' +
       'For absolute changes, you may use recently queried state from context if no manual interactions occurred.',
-    inputSchema: {
-      forceRefresh: z.boolean().optional().describe(
-        'Force refresh from browser (defaults to false, uses cache). ' +
-        'Set to true if: user manually interacted with the 3D app, state might have changed, ' +
-        'or accuracy is critical. Use false (default) if state was recently queried and no manual interactions occurred.'
-      )
-    }
+    inputSchema: {}
   },
-  async ({ forceRefresh = false }) => {
+  async () => {
     const sessionId = getCurrentSessionId();
     if (!sessionId) {
       return {
@@ -1920,7 +1830,7 @@ mcpServer.registerTool(
     }
 
     try {
-      const { state, metadata } = await getState(sessionId, forceRefresh);
+      const { state, metadata } = await getState(sessionId);
       const rotation = state.model?.rotation || { x: 0, y: 0, z: 0 };
       const rotationText = `X (pitch): ${rotation.x}°, Y (yaw): ${rotation.y}°, Z (roll): ${rotation.z}°`;
       
@@ -1928,7 +1838,7 @@ mcpServer.registerTool(
         content: [
           {
             type: 'text',
-            text: formatStateResponse(rotationText, 'Model rotation', sessionId, forceRefresh, metadata)
+            text: formatStateResponse(rotationText, 'Model rotation', sessionId, metadata)
           }
         ]
       };
@@ -1953,15 +1863,9 @@ mcpServer.registerTool(
     description: 'Get the current model color as a hex color code (e.g., "#ff0000"). ' +
       'Query this before relative color changes (e.g., "darken by 10%") to ensure accuracy. ' +
       'For absolute changes, you may use recently queried state from context if no manual interactions occurred.',
-    inputSchema: {
-      forceRefresh: z.boolean().optional().describe(
-        'Force refresh from browser (defaults to false, uses cache). ' +
-        'Set to true if: user manually interacted with the 3D app, state might have changed, ' +
-        'or accuracy is critical. Use false (default) if state was recently queried and no manual interactions occurred.'
-      )
-    }
+    inputSchema: {}
   },
-  async ({ forceRefresh = false }) => {
+  async () => {
     const sessionId = getCurrentSessionId();
     if (!sessionId) {
       return {
@@ -1976,14 +1880,14 @@ mcpServer.registerTool(
     }
 
     try {
-      const { state, metadata } = await getState(sessionId, forceRefresh);
+      const { state, metadata } = await getState(sessionId);
       const color = state.model?.color || '#808080';
       
       return {
         content: [
           {
             type: 'text',
-            text: formatStateResponse(color, 'Model color', sessionId, forceRefresh, metadata)
+            text: formatStateResponse(color, 'Model color', sessionId, metadata)
           }
         ]
       };
@@ -2008,15 +1912,9 @@ mcpServer.registerTool(
     description: 'Get the current model scale in each dimension (x, y, z) as scale factors. ' +
       'Query this before relative scale changes (e.g., "scale by 1.5x") to ensure accuracy. ' +
       'For absolute changes, you may use recently queried state from context if no manual interactions occurred.',
-    inputSchema: {
-      forceRefresh: z.boolean().optional().describe(
-        'Force refresh from browser (defaults to false, uses cache). ' +
-        'Set to true if: user manually interacted with the 3D app, state might have changed, ' +
-        'or accuracy is critical. Use false (default) if state was recently queried and no manual interactions occurred.'
-      )
-    }
+    inputSchema: {}
   },
-  async ({ forceRefresh = false }) => {
+  async () => {
     const sessionId = getCurrentSessionId();
     if (!sessionId) {
       return {
@@ -2031,7 +1929,7 @@ mcpServer.registerTool(
     }
 
     try {
-      const { state, metadata } = await getState(sessionId, forceRefresh);
+      const { state, metadata } = await getState(sessionId);
       const scale = state.model?.scale || { x: 1, y: 1, z: 1 };
       const scaleText = `X: ${scale.x}, Y: ${scale.y}, Z: ${scale.z}`;
       
@@ -2039,7 +1937,7 @@ mcpServer.registerTool(
         content: [
           {
             type: 'text',
-            text: formatStateResponse(scaleText, 'Model scale', sessionId, forceRefresh, metadata)
+            text: formatStateResponse(scaleText, 'Model scale', sessionId, metadata)
           }
         ]
       };
@@ -2116,7 +2014,7 @@ mcpServer.registerTool(
     // Query fresh state before manipulation
     let currentState = null;
     try {
-      const { state } = await getState(sessionId, true); // forceRefresh: true
+      const { state } = await getState(sessionId);
       currentState = state.model?.rotation || { x: 0, y: 0, z: 0 };
     } catch (error) {
       // If state query fails, proceed anyway but note it in response
@@ -2172,7 +2070,7 @@ mcpServer.registerTool(
     // Query fresh state before manipulation
     let currentState = null;
     try {
-      const { state } = await getState(sessionId, true); // forceRefresh: true
+      const { state } = await getState(sessionId);
       currentState = state.model?.rotation || { x: 0, y: 0, z: 0 };
     } catch (error) {
       console.warn(`Failed to query state before rotation: ${error.message}`);
