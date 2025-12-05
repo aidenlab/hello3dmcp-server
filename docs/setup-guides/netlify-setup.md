@@ -26,14 +26,12 @@ This guide covers the configuration for hosting the 3D app on Netlify with a loc
 
 ```bash
 cd /Users/turner/MCPDevelopment/Hello3DLLM
-node server.js --browser-url https://hello3dllm.netlify.app/
+node server.js --browser-url https://hello3dmcp-frontend.netlify.app/
 ```
-
-Replace `https://your-app.netlify.app` with your actual Netlify URL.
 
 **Alternative syntax:**
 ```bash
-node server.js -u https://your-app.netlify.app
+node server.js -u https://hello3dmcp-frontend.netlify.app/
 ```
 
 The server will start on:

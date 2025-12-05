@@ -96,14 +96,12 @@ node server.js --help
 | **VS Code + MCP** | Free | ✅ Yes | ❌ No | VS Code users |
 | **Claude Code** | Free | ✅ Yes | ❌ No | CLI-based testing |
 | **Continue.dev** | Free | ✅ Yes | ❌ No | VS Code extension users |
-| **Claude Desktop** | Free | ✅ Yes (subprocess mode) | ✅ Yes (HTTP mode + tunnel) | Desktop app with Claude |
+| **Claude Desktop** | Free | ✅ Yes | ❌ No | Desktop app with Claude |
 | **ChatGPT** | Paid (Plus) | ❌ No | ✅ Yes (tunnel needed) | OpenAI integration |
 
 ### Claude Desktop Installation
 
-**Option 1: MCP Package (`.mcpb`) - Recommended**
-
-The simplest installation method - just install the package file:
+Install the MCP package (`.mcpb`) file:
 
 1. **Build the package:**
    ```bash
@@ -123,78 +121,6 @@ The simplest installation method - just install the package file:
    - Open that URL in your browser
 
 **Benefits:** No manual configuration needed, self-contained package, easy updates.
-
-**Option 2: Manual Configuration (For Development)**
-
-For development or custom setups, see the detailed guide: [Claude Desktop Setup Guide](docs/setup-guides/claude-desktop-setup.md)
-
-1. **Make sure server is NOT already running** (Claude Desktop will start it)
-
-2. **Locate Claude Desktop configuration:**
-
-   **macOS:**
-   ```
-   ~/Library/Application Support/Claude/claude_desktop_config.json
-   ```
-   
-   **Windows:**
-   ```
-   %APPDATA%\Claude\claude_desktop_config.json
-   ```
-   
-   **Linux:**
-   ```
-   ~/.config/Claude/claude_desktop_config.json
-   ```
-
-3. **Edit configuration file:**
-   ```json
-   {
-     "mcpServers": {
-       "hello3dmcp-server": {
-         "command": "node",
-         "args": ["/absolute/path/to/hello3dmcp-server/server.js"]
-       }
-     }
-   }
-   ```
-   
-   ⚠️ **Important:** Use the absolute path to `server.js`
-
-4. **Restart Claude Desktop**
-
-5. **Get connection URL:**
-   - Ask Claude: "How do I connect to the 3D app?" or "Get browser URL"
-   - Claude will provide a URL with your unique session ID
-   - Open that URL in your browser
-
-### Claude Desktop (HTTP/SSE Mode)
-
-For remote access or when running server manually:
-
-1. **Start server manually:**
-   ```bash
-   node server.js
-   ```
-
-2. **Create tunnel (if needed):**
-   ```bash
-   ngrok http 3000
-   # or
-   lt --port 3000 --subdomain hello3dmcp-server
-   ```
-
-3. **Configure Claude Desktop:**
-   ```json
-   {
-     "mcpServers": {
-       "hello3dmcp-server": {
-         "url": "https://your-tunnel-url/mcp",
-         "transport": "sse"
-       }
-     }
-   }
-   ```
 
 ### ChatGPT Setup
 

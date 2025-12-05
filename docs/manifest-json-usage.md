@@ -34,7 +34,7 @@ During development, `manifest.json` exists in your project root but is **not act
       "command": "node",
       "args": ["${__dirname}/dist/hello3dmcp-server.js"],
       "env": {
-        "BROWSER_URL": "https://hello3dllm.netlify.app/",
+        "BROWSER_URL": "https://hello3dmcp-frontend.netlify.app/",
         "MCP_PORT": "3000",
         "WS_PORT": "3001"
       }
@@ -135,7 +135,7 @@ const args = manifest.server.mcp_config.args.map(arg =>
 
 // Set environment variables from manifest
 Object.assign(process.env, manifest.server.mcp_config.env);
-// Result: BROWSER_URL="https://hello3dllm.netlify.app/", etc.
+// Result: BROWSER_URL="https://hello3dmcp-frontend.netlify.app/", etc.
 
 // Start the server
 spawn(manifest.server.mcp_config.command, args, {
@@ -204,7 +204,7 @@ Users can override values from `manifest.json`:
 1. **Developer edits manifest.json:**
    ```json
    "env": {
-     "BROWSER_URL": "https://hello3dllm.netlify.app/"
+     "BROWSER_URL": "https://hello3dmcp-frontend.netlify.app/"
    }
    ```
 
@@ -218,11 +218,11 @@ Users can override values from `manifest.json`:
 3. **User installs package:**
    - Claude Desktop extracts `.mcpb`
    - Claude Desktop reads `manifest.json`
-   - Claude Desktop sets `BROWSER_URL=https://hello3dllm.netlify.app/` as environment variable
+   - Claude Desktop sets `BROWSER_URL=https://hello3dmcp-frontend.netlify.app/` as environment variable
 
 4. **Server starts:**
    - Claude Desktop runs: `node /path/to/package/dist/hello3dmcp-server.js`
-   - Server reads `process.env.BROWSER_URL` → gets `"https://hello3dllm.netlify.app/"`
+   - Server reads `process.env.BROWSER_URL` → gets `"https://hello3dmcp-frontend.netlify.app/"`
    - Server uses this URL for browser connections
 
 ---
