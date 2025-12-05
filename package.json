@@ -1,6 +1,6 @@
 {
   "name": "hello3dmcp-server",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "MCP server for controlling 3D model visualization via Model Context Protocol",
   "type": "module",
   "private": true,
@@ -13,7 +13,13 @@
     "build": "node esbuild.config.js && node build-mcpb.js",
     "build:bundle": "node esbuild.config.js",
     "build:package": "node build-mcpb.js",
-    "start:prod": "node dist/hello3dmcp-server.js"
+    "start:prod": "node dist/hello3dmcp-server.js",
+    "version:sync": "node scripts/sync-version.js",
+    "version:patch": "node scripts/sync-version.js --patch",
+    "version:minor": "node scripts/sync-version.js --minor",
+    "version:major": "node scripts/sync-version.js --major",
+    "version:set": "node scripts/sync-version.js",
+    "preversion": "node scripts/sync-version.js"
   },
   "keywords": [
     "mcp",
@@ -36,4 +42,3 @@
     "esbuild": "^0.19.0"
   }
 }
-
