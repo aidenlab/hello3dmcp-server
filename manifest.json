@@ -1,0 +1,24 @@
+{
+  "manifest_version": "0.1",
+  "name": "hello3dmcp-server",
+  "version": "0.2.1",
+  "description": "MCP server for controlling 3D model visualization via Model Context Protocol",
+  "author": {
+    "name": "Douglass Turner"
+  },
+  "server": {
+    "type": "node",
+    "entry_point": "dist/hello3dmcp-server.js",
+    "mcp_config": {
+      "command": "node",
+      "args": [
+        "${__dirname}/dist/hello3dmcp-server.js"
+      ],
+      "env": {
+        "BROWSER_URL": "https://hello3dmcp-frontend.netlify.app/",
+        "MCP_PORT": "3000",
+        "WS_PORT": "3001"
+      }
+    }
+  }
+}

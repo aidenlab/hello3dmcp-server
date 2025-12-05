@@ -96,80 +96,31 @@ node server.js --help
 | **VS Code + MCP** | Free | ✅ Yes | ❌ No | VS Code users |
 | **Claude Code** | Free | ✅ Yes | ❌ No | CLI-based testing |
 | **Continue.dev** | Free | ✅ Yes | ❌ No | VS Code extension users |
-| **Claude Desktop** | Free | ✅ Yes (subprocess mode) | ✅ Yes (HTTP mode + tunnel) | Desktop app with Claude |
+| **Claude Desktop** | Free | ✅ Yes | ❌ No | Desktop app with Claude |
 | **ChatGPT** | Paid (Plus) | ❌ No | ✅ Yes (tunnel needed) | OpenAI integration |
 
-### Claude Desktop (Subprocess Mode - Recommended)
+### Claude Desktop Installation
 
-This is the simplest setup - Claude Desktop manages the server automatically.
+Install the MCP package (`.mcpb`) file:
 
-1. **Make sure server is NOT already running** (Claude Desktop will start it)
+1. **Build the package:**
+   ```bash
+   npm run build
+   ```
+   This creates `hello3dmcp-server.mcpb` in your project root.
 
-2. **Locate Claude Desktop configuration:**
+2. **Install in Claude Desktop:**
+   - Open Claude Desktop → Settings → Extensions → Advanced Settings
+   - Click "Install Extension"
+   - Select the `hello3dmcp-server.mcpb` file
+   - Restart Claude Desktop
 
-   **macOS:**
-   ```
-   ~/Library/Application Support/Claude/claude_desktop_config.json
-   ```
-   
-   **Windows:**
-   ```
-   %APPDATA%\Claude\claude_desktop_config.json
-   ```
-   
-   **Linux:**
-   ```
-   ~/.config/Claude/claude_desktop_config.json
-   ```
-
-3. **Edit configuration file:**
-   ```json
-   {
-     "mcpServers": {
-       "hello3dmcp-server": {
-         "command": "node",
-         "args": ["/absolute/path/to/hello3dmcp-server/server.js"]
-       }
-     }
-   }
-   ```
-   
-   ⚠️ **Important:** Use the absolute path to `server.js`
-
-4. **Restart Claude Desktop**
-
-5. **Get connection URL:**
+3. **Get connection URL:**
    - Ask Claude: "How do I connect to the 3D app?" or "Get browser URL"
    - Claude will provide a URL with your unique session ID
    - Open that URL in your browser
 
-### Claude Desktop (HTTP/SSE Mode)
-
-For remote access or when running server manually:
-
-1. **Start server manually:**
-   ```bash
-   node server.js
-   ```
-
-2. **Create tunnel (if needed):**
-   ```bash
-   ngrok http 3000
-   # or
-   lt --port 3000 --subdomain hello3dmcp-server
-   ```
-
-3. **Configure Claude Desktop:**
-   ```json
-   {
-     "mcpServers": {
-       "hello3dmcp-server": {
-         "url": "https://your-tunnel-url/mcp",
-         "transport": "sse"
-       }
-     }
-   }
-   ```
+**Benefits:** No manual configuration needed, self-contained package, easy updates.
 
 ### ChatGPT Setup
 
@@ -222,10 +173,16 @@ The MCP Inspector is a developer tool for testing and debugging MCP servers. It 
 
 *Example: MCP Inspector connected to the server, showing tools being tested.*
 
-**To use with your MCP server:**
+**Testing Options:**
 
-1. **Make sure your MCP server is running:**
+You can test either the source code (development) or the bundled version (production):
+
+**Option 1: Test Source Code (Development)**
+
+1. **Start the server from source:**
    ```bash
+   npm start
+   # or
    node server.js
    ```
    Server should be running on `http://localhost:3000/mcp`
@@ -234,6 +191,29 @@ The MCP Inspector is a developer tool for testing and debugging MCP servers. It 
    ```bash
    npx @modelcontextprotocol/inspector http://localhost:3000/mcp
    ```
+
+**Option 2: Test Bundled Version (Production)**
+
+1. **Build the bundle:**
+   ```bash
+   npm run build:bundle
+   ```
+   This creates `dist/hello3dmcp-server.js`
+
+2. **Start the bundled server:**
+   ```bash
+   npm run start:prod
+   # or
+   node dist/hello3dmcp-server.js
+   ```
+   Server should be running on `http://localhost:3000/mcp`
+
+3. **Start the MCP Inspector:**
+   ```bash
+   npx @modelcontextprotocol/inspector http://localhost:3000/mcp
+   ```
+
+**Using the Inspector:**
 
 3. **Open the Inspector UI:**
    - The inspector will start a web interface (usually on `http://localhost:5173`)
