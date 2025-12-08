@@ -33,6 +33,12 @@ Before starting, ensure you have:
 - **Wrangler CLI** (`npm i -g wrangler` or npx)
 - A **Cloudflare account** with access to the Containers beta
 
+**Important:** Cloudflare Containers is currently in **beta**. If you get an "Unauthorized" error:
+1. Make sure Containers beta is enabled on your account (check Cloudflare Dashboard → Workers & Pages → Containers)
+2. Verify your account has the necessary permissions
+3. Try logging out and back in: `npx wrangler logout` then `npx wrangler login`
+4. Ensure you're using the correct account (check with `npx wrangler whoami`)
+
 ---
 
 ## 3. Add a Dockerfile to the Project
@@ -86,11 +92,28 @@ Confirm the server is accessible at:
 
 ## 5. Push to Cloudflare Container Registry
 
-Use Wrangler to build and push the container:
+**Important:** Make sure you're authenticated with Cloudflare first:
 
 ```bash
-npx wrangler containers build -p -t hello3dmcp-server:latest
+npx wrangler login
 ```
+
+This will open a browser window for you to authenticate with your Cloudflare account.
+
+**If you have multiple Cloudflare accounts**, you'll need to specify which account to use. Either:
+- Set `account_id` in your `wrangler.toml` or `wrangler.jsonc` file, or
+- Set the `CLOUDFLARE_ACCOUNT_ID` environment variable
+
+Then, use Wrangler to build and push the container:
+
+```bash
+npx wrangler containers build . -p -t hello3dmcp-server:latest
+```
+
+**Note:** 
+- The `.` specifies the current directory (where your Dockerfile is located)
+- The `-p` flag automatically pushes the image to Cloudflare's registry after building
+- The command should be run from your project root directory
 
 Wrangler outputs a registry URI similar to:
 
@@ -98,13 +121,23 @@ Wrangler outputs a registry URI similar to:
 registry.cloudflare.com/<account-id>/hello3dmcp-server:latest
 ```
 
-Alternatively, you may push manually using Docker after authenticating.
+**Save this registry URI** - you'll need it in the next step for your `wrangler.toml` configuration.
+
+**Alternative:** If you prefer to build and push separately:
+
+```bash
+# Build only
+npx wrangler containers build . -t hello3dmcp-server:latest
+
+# Push separately
+npx wrangler containers push hello3dmcp-server:latest
+```
 
 ---
 
-## 6. Create `wrangler.toml`
+## 6. Create `wrangler.toml` (or `wrangler.jsonc`)
 
-In the project root, create a file named ``.
+In the project root, create a file named `wrangler.toml` (or use `wrangler.jsonc` if you prefer JSON).
 
 ```toml
 name = "hello3dmcp-cloudflare"

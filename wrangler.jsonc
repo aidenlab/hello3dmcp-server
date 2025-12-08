@@ -3,6 +3,7 @@
   "main": "server.js",
   "compatibility_date": "2024-12-01",
   "compatibility_flags": ["nodejs_compat"],
+  "account_id": "c4d518f1bd8e042051183bcc1ca58d10",
   "vars": {
     "BROWSER_URL": "https://hello3dmcp-frontend.netlify.app"
   }
