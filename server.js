@@ -2868,7 +2868,9 @@ app.use(
 // Detect if we're running in STDIO mode (subprocess) or HTTP mode
 // If stdin is NOT a TTY, we're being run as a subprocess (STDIO mode)
 // If stdin IS a TTY, we're running manually (HTTP mode)
-const isStdioMode = !process.stdin.isTTY;
+// Allow forcing HTTP mode via environment variable (useful for Docker/containers)
+const forceHttpMode = process.env.MCP_TRANSPORT === 'http' || process.env.MCP_TRANSPORT === 'sse' || process.env.FORCE_HTTP_MODE === 'true';
+const isStdioMode = !forceHttpMode && !process.stdin.isTTY;
 
 // Map to store transports by session ID (for HTTP mode)
 const transports = {};
