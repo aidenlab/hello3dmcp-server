@@ -123,6 +123,8 @@ registry.cloudflare.com/<account-id>/hello3dmcp-server:latest
 
 **Save this registry URI** - you'll need it in the next step for your `wrangler.toml` configuration.
 
+**⚠️ Important:** After completing step 5, make sure to update the `containers.image` field in your `wrangler.jsonc` (or `wrangler.toml`) file with the actual registry URI you received. Replace the placeholder `<account-id>` with your actual account ID, or use the full registry URI exactly as shown in the output.
+
 **Alternative:** If you prefer to build and push separately:
 
 ```bash
@@ -145,6 +147,11 @@ compatibility_date = "2025-12-07"
 
 [containers]
 image = "registry.cloudflare.com/<account-id>/hello3dmcp-server:latest"
+```
+
+**⚠️ Important:** Replace `<account-id>` in the `image` field with your actual account ID from step 5, or use the full registry URI exactly as shown in the Wrangler output. For example, if your account ID is `c4d518f1bd8e042051183bcc1ca58d10`, the image should be:
+```
+image = "registry.cloudflare.com/c4d518f1bd8e042051183bcc1ca58d10/hello3dmcp-server:latest"
 ```
 
 This tells Cloudflare which container image to deploy.
