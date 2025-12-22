@@ -30,8 +30,11 @@ Cloudflare Containers can run the server globally, but Containers are **private 
 Before starting, ensure you have:
 
 - **Docker** (e.g., Docker Desktop or a compatible engine)
+  - **Important:** Make sure Docker Desktop is running before proceeding. On macOS, open Docker Desktop from Applications and wait until you see "Docker Desktop is running" in the menu bar. You can verify Docker is running with: `docker ps` (should not show an error)
 - **Wrangler CLI** (`npm i -g wrangler` or npx)
 - A **Cloudflare account** with access to the Containers beta
+
+**Important Account Note:** For this project, use the **Theaidenlab@gmail.com** Cloudflare account, which has access to the Containers beta. You can verify which account you're using with `npx wrangler whoami` and set the `account_id` in your `wrangler.jsonc` or `wrangler.toml` file accordingly.
 
 **Important:** Cloudflare Containers is currently in **beta**. If you get an "Unauthorized" error:
 1. Make sure Containers beta is enabled on your account (check Cloudflare Dashboard → Workers & Pages → Containers)
@@ -71,6 +74,8 @@ This builds the production server with only necessary files and exposes the port
 
 ## 4. Build the Container Locally
 
+**Before starting:** Make sure Docker Desktop is running. If you get an error like "Cannot connect to the Docker daemon", start Docker Desktop and wait for it to fully initialize.
+
 From the project root:
 
 ```bash
@@ -79,9 +84,26 @@ docker build -t hello3dmcp-server:latest .
 
 Test it locally:
 
+**Basic test (uses default browser URL):**
 ```bash
 docker run -p 3000:3000 -p 3001:3001 hello3dmcp-server:latest
 ```
+
+**Test with Netlify-hosted frontend:**
+```bash
+docker run -p 3000:3000 -p 3001:3001 \
+  -e BROWSER_URL=https://hello3dmcp-frontend.netlify.app \
+  hello3dmcp-server:latest
+```
+
+**Test with local frontend (e.g., Vite dev server on port 5173):**
+```bash
+docker run -p 3000:3000 -p 3001:3001 \
+  -e BROWSER_URL=http://localhost:5173 \
+  hello3dmcp-server:latest
+```
+
+**Note:** Use the `-e BROWSER_URL` environment variable to configure which frontend the server should connect to. This is especially useful when testing with MCP Inspector - you can switch between your local development frontend and the Netlify-hosted production frontend.
 
 Confirm the server is accessible at:
 
@@ -100,8 +122,8 @@ npx wrangler login
 
 This will open a browser window for you to authenticate with your Cloudflare account.
 
-**If you have multiple Cloudflare accounts**, you'll need to specify which account to use. Either:
-- Set `account_id` in your `wrangler.toml` or `wrangler.jsonc` file, or
+**If you have multiple Cloudflare accounts**, you'll need to specify which account to use. For this project, use the **Theaidenlab@gmail.com** account. Either:
+- Set `account_id` in your `wrangler.toml` or `wrangler.jsonc` file (account ID: `1eadb18bb8557fd1bd06b1d0310a902e`), or
 - Set the `CLOUDFLARE_ACCOUNT_ID` environment variable
 
 Then, use Wrangler to build and push the container:
@@ -139,7 +161,20 @@ npx wrangler containers push hello3dmcp-server:latest
 
 ## 6. Create `wrangler.toml` (or `wrangler.jsonc`)
 
-In the project root, create a file named `wrangler.toml` (or use `wrangler.jsonc` if you prefer JSON).
+**Important:** You should have a basic `wrangler.jsonc` or `wrangler.toml` file for authentication (step 5), but **do NOT add the `containers` section until AFTER you've completed step 5** (pushed the container to the registry).
+
+If you don't have a `wrangler.jsonc` or `wrangler.toml` file yet, create a basic one:
+
+```jsonc
+{
+  "name": "hello3dmcp-cloudflare",
+  "main": "index.js",
+  "compatibility_date": "2024-12-01",
+  "account_id": "your-account-id-here"
+}
+```
+
+**After completing step 5** (after pushing the container), update your `wrangler.toml` or `wrangler.jsonc` to include the containers configuration:
 
 ```toml
 name = "hello3dmcp-cloudflare"

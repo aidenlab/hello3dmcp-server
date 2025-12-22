@@ -3,10 +3,12 @@
   "main": "index.js",
   "compatibility_date": "2024-12-01",
   "compatibility_flags": ["nodejs_compat"],
-  "account_id": "c4d518f1bd8e042051183bcc1ca58d10",
-  "containers": {
-    "image": "registry.cloudflare.com/<account-id>/hello3dmcp-server:latest"
-  },
+  "account_id": "1eadb18bb8557fd1bd06b1d0310a902e",
+  "containers": [
+    {
+      "image": "registry.cloudflare.com/1eadb18bb8557fd1bd06b1d0310a902e/hello3dmcp-server:latest"
+    }
+  ],
   "bindings": [
     {
       "type": "container",
