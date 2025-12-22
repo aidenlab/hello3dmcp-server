@@ -5,6 +5,7 @@ import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import express from 'express';
 import cors from 'cors';
 import { WebSocketServer } from 'ws';
+import { createServer } from 'http';
 import { randomUUID } from 'node:crypto';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { z } from 'zod';
@@ -110,30 +111,48 @@ const sessionStateCache = new Map();
 const STATE_QUERY_TIMEOUT = 2000;
 
 // Create WebSocket server for browser communication
-const wss = new WebSocketServer({ port: WS_PORT });
+// Note: We'll attach it to the HTTP server below (for Cloudflare compatibility)
+// For backward compatibility, check if we should use a separate port
+const USE_SEPARATE_WS_PORT = process.env.USE_SEPARATE_WS_PORT === 'true';
+let wss;
+if (USE_SEPARATE_WS_PORT) {
+  // Legacy mode: separate WebSocket port (for direct Docker testing)
+  wss = new WebSocketServer({ port: WS_PORT });
+} else {
+  // Modern mode: WebSocket on same port as HTTP (for Cloudflare/Wrangler dev)
+  // Will be attached to HTTP server below
+  wss = null; // Will be created after HTTP server starts
+}
 
-// Handle WebSocket server errors (e.g., port already in use)
-wss.on('error', (error) => {
-  if (error.code === 'EADDRINUSE') {
-    console.error(`\n❌ ERROR: Port ${WS_PORT} is already in use.`);
-    console.error(`   Another instance of the server may be running.`);
-    console.error(`   To fix this:`);
-    console.error(`   1. Find the process using port ${WS_PORT}: lsof -i :${WS_PORT}`);
-    console.error(`   2. Kill it: kill <PID>`);
-    console.error(`   3. Or change WS_PORT in your environment\n`);
-    process.exit(1);
-  } else {
-    console.error('WebSocket server error:', error);
-    process.exit(1);
-  }
-});
+// Handle WebSocket server setup based on mode
+if (wss) {
+  // Legacy mode: separate port - set up error handlers
+  wss.on('error', (error) => {
+    if (error.code === 'EADDRINUSE') {
+      console.error(`\n❌ ERROR: Port ${WS_PORT} is already in use.`);
+      console.error(`   Another instance of the server may be running.`);
+      console.error(`   To fix this:`);
+      console.error(`   1. Find the process using port ${WS_PORT}: lsof -i :${WS_PORT}`);
+      console.error(`   2. Kill it: kill <PID>`);
+      console.error(`   3. Or change WS_PORT in your environment\n`);
+      process.exit(1);
+    } else {
+      console.error('WebSocket server error:', error);
+      process.exit(1);
+    }
+  });
 
-wss.on('listening', () => {
-  // Use console.error to avoid interfering with MCP protocol on stdout
-  console.error(`WebSocket server listening on ws://localhost:${WS_PORT}`);
-});
+  wss.on('listening', () => {
+    // Use console.error to avoid interfering with MCP protocol on stdout
+    console.error(`WebSocket server listening on ws://localhost:${WS_PORT}`);
+  });
+} else {
+  // Modern mode: will be attached to HTTP server below
+  console.error('WebSocket will be served on the same port as HTTP (port 3000)');
+}
 
-wss.on('connection', (ws) => {
+// WebSocket connection handler function (used by both modes)
+function setupWebSocketConnection(ws) {
   console.warn('Browser client connected (waiting for session ID)');
   let sessionId = null;
 
@@ -224,7 +243,12 @@ wss.on('connection', (ws) => {
   ws.on('error', (error) => {
     console.error(`WebSocket error (session: ${sessionId || 'unregistered'}):`, error);
   });
-});
+}
+
+// Attach connection handler to wss if it exists (separate port mode)
+if (wss) {
+  wss.on('connection', setupWebSocketConnection);
+}
 
 // Send command to a specific session's browser client
 function sendToSession(sessionId, command) {
@@ -3128,6 +3152,21 @@ if (!isStdioMode) {
   const __dirname = dirname(__filename);
   const distPath = join(__dirname, 'dist');
 
+  // CRITICAL: Always skip /ws path - WebSocket upgrades are handled at HTTP server level
+  // This middleware runs BEFORE any other middleware to ensure /ws requests are never processed by Express
+  app.use((req, res, next) => {
+    // Skip WebSocket upgrade requests - they are handled by WebSocketServer at HTTP server level
+    // WebSocket upgrades happen via the 'upgrade' event, not Express routes
+    // If Express processes these, it will send a 404 before the upgrade can happen
+    if (req.path === '/ws' || req.headers.upgrade === 'websocket') {
+      // Don't send a response - let the HTTP server handle the upgrade
+      // The WebSocketServer attached to httpServer will handle it via the upgrade event
+      return;
+    }
+    // Continue to next middleware for all other requests
+    next();
+  });
+
   if (existsSync(distPath)) {
     app.use(express.static(distPath));
     // Serve index.html for all non-API routes (SPA routing)
@@ -3138,6 +3177,7 @@ if (!isStdioMode) {
       if (req.path.startsWith('/mcp')) {
         return next();
       }
+      // Note: /ws is already handled by the middleware above, so we don't need to check here
       // Only handle GET requests for SPA routing
       if (req.method === 'GET') {
         res.sendFile(join(distPath, 'index.html'));
@@ -3147,11 +3187,24 @@ if (!isStdioMode) {
     });
   }
 
+  // Create HTTP server and attach Express app
+  const httpServer = createServer(app);
+  
+  // Attach WebSocket server to HTTP server if not using separate port
+  // IMPORTANT: This must be done BEFORE httpServer.listen() so the upgrade handler is registered
+  if (!USE_SEPARATE_WS_PORT) {
+    wss = new WebSocketServer({ server: httpServer, path: '/ws' });
+    wss.on('connection', setupWebSocketConnection);
+    console.error(`WebSocket server attached to HTTP server on port ${MCP_PORT} at /ws`);
+  }
+  
   // Start HTTP server
-  app.listen(MCP_PORT, () => {
+  httpServer.listen(MCP_PORT, () => {
     // Use console.error for startup messages to avoid interfering with MCP protocol on stdout
     console.error(`MCP Server listening on http://localhost:${MCP_PORT}/mcp`);
-    // WebSocket server listening message is logged by the 'listening' event handler
+    if (!USE_SEPARATE_WS_PORT) {
+      console.error(`WebSocket server available at ws://localhost:${MCP_PORT}/ws`);
+    }
     console.error(`Browser URL configured: ${BROWSER_URL}`);
     if (existsSync(distPath)) {
       console.error(`Serving static files from ${distPath}`);
@@ -3164,7 +3217,9 @@ process.on('SIGINT', async () => {
   console.warn('Shutting down servers...');
   
   // Close all WebSocket connections
-  wss.close();
+  if (wss) {
+    wss.close();
+  }
   
   // Close all MCP transports
   for (const sessionId in transports) {

@@ -4,15 +4,24 @@
   "compatibility_date": "2024-12-01",
   "compatibility_flags": ["nodejs_compat"],
   "account_id": "1eadb18bb8557fd1bd06b1d0310a902e",
-  "containers": [
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "MCP_CONTAINER",
+        "class_name": "MCPContainer"
+      }
+    ]
+  },
+  "migrations": [
     {
-      "image": "registry.cloudflare.com/1eadb18bb8557fd1bd06b1d0310a902e/hello3dmcp-server:latest"
+      "tag": "v1",
+      "new_sqlite_classes": ["MCPContainer"]
     }
   ],
-  "bindings": [
+  "containers": [
     {
-      "type": "container",
-      "name": "MCP_CONTAINER"
+      "class_name": "MCPContainer",
+      "image": "registry.cloudflare.com/1eadb18bb8557fd1bd06b1d0310a902e/hello3dmcp-server:latest"
     }
   ],
   "vars": {

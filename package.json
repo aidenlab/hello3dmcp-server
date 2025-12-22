@@ -31,6 +31,7 @@
   "author": "Douglass Turner",
   "license": "MIT",
   "dependencies": {
+    "@cloudflare/containers": "^0.0.31",
     "@modelcontextprotocol/sdk": "^1.22.0",
     "cors": "^2.8.5",
     "express": "^5.1.0",
