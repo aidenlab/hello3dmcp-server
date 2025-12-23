@@ -546,7 +546,9 @@ const container = env.MCP_CONTAINER.get(id);
 
 ## 12. Deploy to Cloudflare
 
-When ready:
+### Basic Deployment
+
+When ready to deploy:
 
 ```bash
 npx wrangler deploy
@@ -560,10 +562,140 @@ This deploys:
 The output will contain a public URL, for example:
 
 ```
-https://hello3dmcp-cloudflare.<your-domain>.workers.dev
+https://hello3dmcp-cloudflare.<your-subdomain>.workers.dev
 ```
 
-Point your front-end or MCP client to this URL.
+**Important:** This is the default Workers.dev subdomain. For production, you'll want to use your custom domain.
+
+---
+
+### Using Custom Domains
+
+If you own domains in your Cloudflare account, you can route traffic to your Worker using custom domains.
+
+#### Option 1: Configure Routes in `wrangler.jsonc` (Recommended)
+
+Add a `routes` section to your `wrangler.jsonc`:
+
+```jsonc
+{
+  "name": "hello3dmcp-cloudflare",
+  "main": "index.js",
+  "compatibility_date": "2024-12-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "account_id": "1eadb18bb8557fd1bd06b1d0310a902e",
+  "routes": [
+    {
+      "pattern": "mcp.yourdomain.com/*",
+      "zone_name": "yourdomain.com"
+    }
+  ],
+  // ... rest of configuration
+}
+```
+
+**What this does:**
+- Routes all traffic from `mcp.yourdomain.com` to your Worker
+- The Worker forwards to your container
+- Works for both HTTP and WebSocket
+
+**Example:**
+- HTTP: `https://mcp.yourdomain.com/mcp`
+- WebSocket: `wss://mcp.yourdomain.com/ws`
+
+#### Option 2: Configure via Cloudflare Dashboard
+
+1. Go to **Workers & Pages** → Your Worker → **Settings** → **Triggers**
+2. Under **Routes**, click **Add Route**
+3. Enter your domain pattern (e.g., `mcp.yourdomain.com/*`)
+4. Select your zone
+5. Save
+
+**Note:** Routes configured in the dashboard override `wrangler.jsonc` routes.
+
+---
+
+### How Ports Work in Production
+
+**Important:** In production, there are **no ports** in URLs. Here's how it works:
+
+#### Local Development (with `wrangler dev`):
+```
+Frontend → ws://localhost:8787/ws
+           ↓
+Worker Proxy (port 8787)
+           ↓
+Container (port 3000)
+```
+
+#### Production Deployment:
+```
+Frontend → wss://mcp.yourdomain.com/ws
+           ↓
+Cloudflare Edge (no port!)
+           ↓
+Worker (runs on Cloudflare's infrastructure)
+           ↓
+Container (port 3000 internally)
+```
+
+**Key Differences:**
+
+1. **No Ports in URLs:**
+   - Local: `ws://localhost:8787/ws`
+   - Production: `wss://mcp.yourdomain.com/ws` (no port number!)
+
+2. **HTTPS/WSS Required:**
+   - Local: `ws://` (WebSocket)
+   - Production: `wss://` (Secure WebSocket, required for HTTPS domains)
+
+3. **Container Port:**
+   - Container still runs on port 3000 **internally**
+   - But externally, you access it via domain name
+   - Cloudflare handles the routing
+
+4. **Worker Routes:**
+   - Workers don't use ports
+   - They use **routes** (domain patterns)
+   - Traffic matching the route goes to your Worker
+
+---
+
+### Production Deployment Steps
+
+1. **Ensure your image is pushed to registry:**
+   ```bash
+   docker build --platform linux/amd64 -t hello3dmcp-server:latest .
+   docker tag hello3dmcp-server:latest registry.cloudflare.com/<account-id>/hello3dmcp-server:latest
+   npx wrangler containers push hello3dmcp-server:latest
+   ```
+
+2. **Configure custom domain (if using):**
+   - Add `routes` to `wrangler.jsonc`, OR
+   - Configure via Cloudflare Dashboard
+
+3. **Deploy:**
+   ```bash
+   npx wrangler deploy
+   ```
+
+4. **Update frontend configuration:**
+   - Change WebSocket URL from `ws://localhost:8787/ws` to `wss://mcp.yourdomain.com/ws`
+   - Change MCP endpoint from `http://localhost:8787/mcp` to `https://mcp.yourdomain.com/mcp`
+
+---
+
+### Production URLs
+
+**Without Custom Domain (Workers.dev):**
+- HTTP: `https://hello3dmcp-cloudflare.<subdomain>.workers.dev/mcp`
+- WebSocket: `wss://hello3dmcp-cloudflare.<subdomain>.workers.dev/ws`
+
+**With Custom Domain:**
+- HTTP: `https://mcp.yourdomain.com/mcp`
+- WebSocket: `wss://mcp.yourdomain.com/ws`
+
+**Note:** Always use `wss://` (secure WebSocket) in production, not `ws://`.
 
 ---
 
@@ -663,9 +795,17 @@ npx @modelcontextprotocol/inspector --transport http --server-url http://localho
 ```
 
 **Port Reference:**
+
+**Local Development:**
 - **Wrangler Dev:** Port 8787 (Worker proxy) - Use for testing Cloudflare setup
 - **Docker Default:** Port 3000 (HTTP + WebSocket) - Use for server debugging
 - **Docker Legacy:** Port 3000 (HTTP) + Port 3001 (WebSocket) - Only if needed for backward compatibility
+
+**Production:**
+- **No ports in URLs** - Use domain names instead
+- **Container:** Port 3000 internally (handled by Cloudflare)
+- **Worker:** Routes traffic via domain patterns (no ports)
+- **URLs:** `https://yourdomain.com/mcp` and `wss://yourdomain.com/ws`
 
 ---
 
