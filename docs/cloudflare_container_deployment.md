@@ -190,6 +190,17 @@ registry.cloudflare.com/<account-id>/hello3dmcp-server:latest
 
 **⚠️ Important:** After completing step 5, make sure to update the `containers.image` field in your `wrangler.jsonc` (or `wrangler.toml`) file with the actual registry URI you received. Replace the placeholder `<account-id>` with your actual account ID, or use the full registry URI exactly as shown in the output.
 
+**How `wrangler dev` Uses Containers:**
+
+When you run `npx wrangler dev` for local testing:
+- **It uses the image from Cloudflare's registry** (specified in `wrangler.jsonc` as `registry.cloudflare.com/...`)
+- **But runs it locally** using Docker on your machine
+- Wrangler pulls the image from the registry and runs it in a local Docker container
+- This means you need to have pushed the image to the registry (Step 5) before `wrangler dev` will work
+- The container runs locally, but uses the same image that will be deployed to Cloudflare in production
+
+**In summary:** `wrangler dev` = Cloudflare registry image + local Docker execution. This ensures your local testing matches production behavior.
+
 **Alternative:** If you prefer to build and push separately:
 
 ```bash
@@ -262,6 +273,35 @@ export default {
 
 ## 8. Create `wrangler.jsonc` (or `wrangler.toml`)
 
+**⚠️ Important: Understanding `wrangler.jsonc` vs Container Image**
+
+`wrangler.jsonc` is **NOT** part of the Docker container image. It's a **configuration file** used by Wrangler CLI and Cloudflare's deployment system. Here's how they relate:
+
+**What Goes Into the Container Image (Dockerfile):**
+- Node.js runtime
+- Your `server.js` code
+- Dependencies from `package.json`
+- Environment variables baked at build time (like `FORCE_HTTP_MODE=true`)
+- **Built from:** `Dockerfile` → pushed to Cloudflare Container Registry
+
+**What `wrangler.jsonc` Does:**
+- **Configures the Cloudflare Worker** (`index.js`) that proxies to your container
+- **Tells Cloudflare which container image to use** (via `containers[].image`)
+- **Sets up Durable Objects** and SQLite migrations
+- **Passes runtime environment variables** to the container (via `containers[].env`)
+- **Configures routes, domains, and other Cloudflare settings**
+- **Used by:** Wrangler CLI (`wrangler dev`, `wrangler deploy`) and Cloudflare's deployment system
+
+**Think of it this way:**
+- **Container Image** = Your application code (built once, stored in registry)
+- **`wrangler.jsonc`** = Deployment configuration (how Cloudflare runs your container)
+
+When you deploy, Cloudflare reads `wrangler.jsonc` to know:
+1. Which container image to pull from the registry
+2. How to configure the Worker that proxies to it
+3. What environment variables to pass to the container at runtime
+4. How to route traffic to your Worker
+
 **Important:** You should have a basic `wrangler.jsonc` or `wrangler.toml` file for authentication (step 5), but **do NOT add the `containers` section until AFTER you've completed step 5** (pushed the container to the registry).
 
 If you don't have a `wrangler.jsonc` or `wrangler.toml` file yet, create a basic one:
@@ -302,21 +342,27 @@ If you don't have a `wrangler.jsonc` or `wrangler.toml` file yet, create a basic
   "containers": [
     {
       "class_name": "MCPContainer",
-      "image": "registry.cloudflare.com/1eadb18bb8557fd1bd06b1d0310a902e/hello3dmcp-server:latest"
+      "image": "registry.cloudflare.com/1eadb18bb8557fd1bd06b1d0310a902e/hello3dmcp-server:latest",
+      "env": {
+        "BROWSER_URL": "https://hello3dmcp-frontend.netlify.app"
+      }
     }
-  ],
-  "vars": {
-    "BROWSER_URL": "https://hello3dmcp-frontend.netlify.app"
-  }
+  ]
 }
 ```
 
 **Key configuration points:**
 - `durable_objects.bindings`: Binds the `MCPContainer` class to the `MCP_CONTAINER` environment variable
 - `migrations`: Enables SQLite for the Durable Object (required for Containers)
-- `containers`: Array containing container configuration with `class_name` and `image`
+- `containers`: Array containing container configuration with `class_name`, `image`, and `env`
+- `containers[].env`: Environment variables passed to the container (not the Worker)
 - `account_id`: Your Cloudflare account ID (for this project: `1eadb18bb8557fd1bd06b1d0310a902e`)
-- `vars`: Environment variables passed to the container
+
+**⚠️ Important: Worker vs Container Environment Variables:**
+- **`vars` in `wrangler.jsonc`**: These are for the **Worker** (`index.js`), accessible via `env.BROWSER_URL` in the Worker code
+- **`containers[].env`**: These are for the **Container** (`server.js`), accessible via `process.env.BROWSER_URL` in the container
+- The container runs as a separate process and does **not** automatically receive Worker `vars`
+- To pass environment variables to the container, use `containers[].env` (not `vars`)
 
 **⚠️ Important:** 
 - Replace the `image` field with the actual registry URI from step 5
@@ -365,11 +411,13 @@ There are two ways to test your containerized MCP server locally. Understanding 
 This approach tests the **full Cloudflare setup** including the Worker proxy. This is what you'll use in production, so it's the best way to verify your deployment will work.
 
 **Setup:**
-1. Make sure your container image is built locally with correct platform: `docker build --platform linux/amd64 -t hello3dmcp-server:latest .`
-2. Ensure your `wrangler.jsonc` is properly configured (see Step 8)
-3. **Important:** For local testing, `wrangler dev` will use the Docker image specified in `wrangler.jsonc`. Make sure the image exists locally OR has been pushed to Cloudflare's registry. If using a registry image, ensure you're authenticated and the image is built for AMD64 platform.
+1. **First, push your image to Cloudflare's registry** (complete Step 5). `wrangler dev` pulls the image from the registry specified in `wrangler.jsonc`.
+2. Ensure your `wrangler.jsonc` is properly configured (see Step 8) with the registry image URI.
+3. **Important:** `wrangler dev` uses the **Cloudflare registry image** (not a local Docker image). It pulls this image and runs it locally using Docker. This ensures your local testing matches production.
 4. Run: `npx wrangler dev`
 5. Check the console output for any errors about container startup or image pulling
+
+**Note:** If you make code changes, you need to rebuild and push the image to the registry again before `wrangler dev` will use the updated version.
 
 **Ports and Endpoints:**
 - **Worker proxy runs on:** `http://localhost:8787`
@@ -392,6 +440,28 @@ When testing with Wrangler Dev, your frontend app should connect to the WebSocke
 - **WebSocket URL:** `ws://localhost:8787/ws`
 
 **Important:** The frontend connects to port **8787** (the Worker proxy port), not port 3000 or 3001. The Worker proxy forwards the WebSocket connection to the container internally.
+
+**Switching Between Local and Netlify Frontend:**
+
+To test with either your local frontend or the Netlify-hosted frontend, simply change the `BROWSER_URL` value in `wrangler.jsonc`:
+
+```jsonc
+"containers": [
+  {
+    "class_name": "MCPContainer",
+    "image": "registry.cloudflare.com/.../hello3dmcp-server:latest",
+    "env": {
+      // For local frontend (e.g., Vite dev server on port 5173):
+      "BROWSER_URL": "http://localhost:5173"
+      
+      // For Netlify-hosted frontend:
+      // "BROWSER_URL": "https://hello3dmcp-frontend.netlify.app"
+    }
+  }
+]
+```
+
+**Important:** After changing `BROWSER_URL`, you must **restart `wrangler dev`** for the change to take effect (the container needs to restart with the new environment variable).
 
 **When to use:** Use this when you want to test the complete Cloudflare setup before deploying, or when debugging Worker/Container integration issues.
 
@@ -533,6 +603,33 @@ const container = env.MCP_CONTAINER.get(id);
 - Make sure the server is configured to serve WebSockets on the same port as HTTP (port 3000)
 - The Worker automatically forwards WebSocket upgrades to the container
 - Test at `ws://localhost:8787/ws` (through the Worker proxy)
+
+### Issue: Container not using environment variables from `wrangler.jsonc`
+
+**Problem:** You set `BROWSER_URL` in `vars` but the container isn't using it, defaulting to `http://localhost:5173` instead.
+
+**Cause:** The `vars` section in `wrangler.jsonc` is for the **Worker**, not the **Container**. The container runs as a separate process and doesn't automatically receive Worker environment variables.
+
+**Solution:** Move environment variables from `vars` to `containers[].env`:
+
+```jsonc
+{
+  "containers": [
+    {
+      "class_name": "MCPContainer",
+      "image": "registry.cloudflare.com/.../hello3dmcp-server:latest",
+      "env": {
+        "BROWSER_URL": "https://hello3dmcp-frontend.netlify.app"
+      }
+    }
+  ]
+  // Remove vars if they were only for the container
+}
+```
+
+**Key Point:** 
+- `vars` → Available to Worker (`env.BROWSER_URL` in `index.js`)
+- `containers[].env` → Available to Container (`process.env.BROWSER_URL` in `server.js`)
 
 ### Issue: Container not starting or errors during `wrangler dev`
 **Solutions:**
@@ -701,19 +798,68 @@ Container (port 3000 internally)
 
 ## 13. Environment Variables
 
-You can add environment variables to `wrangler.toml`:
+**⚠️ Important: Worker vs Container Environment Variables**
 
-```toml
-[vars]
-BROWSER_URL = "https://your-frontend.example.com"
-MCP_PORT = "3000"
+There are two types of environment variables in Cloudflare Workers + Containers:
+
+### 1. Worker Environment Variables (`vars`)
+
+These are for the **Worker** (`index.js`) and are accessible via the `env` parameter:
+
+```jsonc
+{
+  "vars": {
+    "WORKER_VAR": "value"
+  }
+}
 ```
 
-Or store secrets:
+Access in Worker (`index.js`):
+```javascript
+export default {
+  async fetch(request, env) {
+    const value = env.WORKER_VAR; // Accessible here
+  }
+}
+```
+
+### 2. Container Environment Variables (`containers[].env`)
+
+These are for the **Container** (`server.js`) and are accessible via `process.env`:
+
+```jsonc
+{
+  "containers": [
+    {
+      "class_name": "MCPContainer",
+      "image": "registry.cloudflare.com/.../hello3dmcp-server:latest",
+      "env": {
+        "BROWSER_URL": "https://hello3dmcp-frontend.netlify.app"
+      }
+    }
+  ]
+}
+```
+
+Access in Container (`server.js`):
+```javascript
+const BROWSER_URL = process.env.BROWSER_URL; // Accessible here
+```
+
+**Why the distinction?**
+- The Worker and Container are **separate processes**
+- Worker `vars` are **not** automatically available to the container
+- To pass variables to the container, use `containers[].env` (not `vars`)
+
+### Secrets
+
+For sensitive data, use Wrangler secrets (these are available to Workers via `env`):
 
 ```bash
 npx wrangler secret put API_TOKEN
 ```
+
+**Note:** Secrets are for Workers. To pass secrets to containers, you may need to use a different approach or pass them through the Worker.
 
 ---
 
@@ -746,7 +892,74 @@ Redeploying the container will spin up a new instance before removing the old on
 
 ---
 
-## 15. Summary of Commands
+## 15. Understanding the Architecture: Container vs Configuration
+
+### What Gets Built vs What Gets Configured
+
+**Container Image (Built from `Dockerfile`):**
+```
+Dockerfile → docker build → Container Image → Pushed to Registry
+├── Node.js runtime
+├── server.js (your MCP server code)
+├── package.json dependencies
+└── Build-time env vars (FORCE_HTTP_MODE=true)
+```
+
+**`wrangler.jsonc` (Configuration File):**
+```
+wrangler.jsonc → Used by Wrangler CLI → Configures Cloudflare Deployment
+├── Which container image to use (containers[].image)
+├── Worker configuration (index.js settings)
+├── Durable Objects setup
+├── Runtime env vars for container (containers[].env)
+└── Routes, domains, account settings
+```
+
+### How They Work Together
+
+1. **Build Phase:**
+   - `Dockerfile` → Container image → Pushed to Cloudflare Registry
+   - Image is stored at: `registry.cloudflare.com/<account-id>/hello3dmcp-server:latest`
+
+2. **Configuration Phase:**
+   - `wrangler.jsonc` tells Cloudflare:
+     - "Use this container image: `registry.cloudflare.com/.../hello3dmcp-server:latest`"
+     - "Run it with these environment variables: `BROWSER_URL=...`"
+     - "Proxy traffic through this Worker: `index.js`"
+
+3. **Deployment Phase:**
+   - `npx wrangler deploy` reads `wrangler.jsonc`
+   - Cloudflare pulls the container image from the registry
+   - Cloudflare starts the container with env vars from `wrangler.jsonc`
+   - Cloudflare deploys the Worker (`index.js`) that proxies to the container
+
+### Key Points
+
+- **Container image is built once** (when you push it)
+- **`wrangler.jsonc` is read every time** you deploy or run `wrangler dev`
+- **You can change `wrangler.jsonc` without rebuilding the container** (for env vars, routes, etc.)
+- **You must rebuild the container** if you change `server.js` or dependencies
+
+### Example Workflow
+
+```bash
+# 1. Build and push container (uses Dockerfile)
+docker build --platform linux/amd64 -t hello3dmcp-server:latest .
+npx wrangler containers push hello3dmcp-server:latest
+
+# 2. Configure deployment (uses wrangler.jsonc)
+# Edit wrangler.jsonc to set containers[].image and containers[].env
+
+# 3. Deploy (reads wrangler.jsonc, pulls container from registry)
+npx wrangler deploy
+
+# 4. Change env vars? Just edit wrangler.jsonc and redeploy (no rebuild needed)
+# 5. Change server.js? Rebuild container AND redeploy
+```
+
+---
+
+## 16. Summary of Commands
 
 ```bash
 # Install dependencies (including @cloudflare/containers)

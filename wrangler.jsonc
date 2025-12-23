@@ -21,10 +21,13 @@
   "containers": [
     {
       "class_name": "MCPContainer",
-      "image": "registry.cloudflare.com/1eadb18bb8557fd1bd06b1d0310a902e/hello3dmcp-server:latest"
+      "image": "registry.cloudflare.com/1eadb18bb8557fd1bd06b1d0310a902e/hello3dmcp-server:latest",
+      "env": {
+        // Change this value to switch between local and Netlify frontend
+        // Local: "http://localhost:5173"
+        // Netlify: "https://hello3dmcp-frontend.netlify.app"
+        "BROWSER_URL": "http://localhost:5173"
+      }
     }
-  ],
-  "vars": {
-    "BROWSER_URL": "https://hello3dmcp-frontend.netlify.app"
-  }
+  ]
 }
