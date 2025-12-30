@@ -60,6 +60,15 @@ const WS_PORT = process.env.WS_PORT ? parseInt(process.env.WS_PORT, 10) : 3001;
 // Priority: 1) Command line argument (--browser-url), 2) Environment variable (BROWSER_URL), 
 //           3) Default (localhost)
 // For .mcpb packages, configuration comes from manifest.json env defaults
+
+// Debug: Log what we're getting for BROWSER_URL
+console.error('[server.js] BROWSER_URL resolution:', {
+  cliArgs_browserUrl: cliArgs.browserUrl,
+  process_env_BROWSER_URL: process.env.BROWSER_URL,
+  all_env_vars_with_BROWSER: Object.keys(process.env).filter(k => k.includes('BROWSER') || k.includes('browser')),
+  final_BROWSER_URL: cliArgs.browserUrl || process.env.BROWSER_URL || 'http://localhost:5173'
+});
+
 const BROWSER_URL = cliArgs.browserUrl || process.env.BROWSER_URL || 'http://localhost:5173';
 
 /**

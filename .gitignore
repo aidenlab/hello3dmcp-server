@@ -27,5 +27,6 @@ dist/
 *.mcpb
 
 # Cloudflare Wrangler
+.wrangler
 .wrangler/
 

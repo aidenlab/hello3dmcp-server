@@ -18,16 +18,15 @@
       "new_sqlite_classes": ["MCPContainer"]
     }
   ],
+  "vars": {
+    // Worker environment variables (accessible in index.js via env.BROWSER_URL)
+    // These are passed to the container via the envVars() method in MCPContainer class
+    "BROWSER_URL": "https://hello3dmcp-frontend.netlify.app"
+  },
   "containers": [
     {
       "class_name": "MCPContainer",
-      "image": "registry.cloudflare.com/1eadb18bb8557fd1bd06b1d0310a902e/hello3dmcp-server:latest",
-      "env": {
-        // Change this value to switch between local and Netlify frontend
-        // Local: "http://localhost:5173"
-        // Netlify: "https://hello3dmcp-frontend.netlify.app"
-        "BROWSER_URL": "http://localhost:5173"
-      }
+      "image": "registry.cloudflare.com/1eadb18bb8557fd1bd06b1d0310a902e/hello3dmcp-server:latest"
     }
   ]
 }

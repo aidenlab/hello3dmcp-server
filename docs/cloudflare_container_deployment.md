@@ -175,10 +175,30 @@ Then, use Wrangler to build and push the container:
 npx wrangler containers build . -p -t hello3dmcp-server:latest
 ```
 
+**⚠️ Important Platform Note:** 
+- `wrangler containers build` builds using your **local Docker**, which means:
+  - On **Apple Silicon Macs** (M1/M2/M3), it will build **ARM64** images by default
+  - This will **fail** when pushing to Cloudflare (which requires AMD64)
+- **Solution:** If you're on Apple Silicon, you have two options:
+
+  **Option 1: Build locally first with platform flag, then push:**
+  ```bash
+  docker build --platform linux/amd64 -t hello3dmcp-server:latest .
+  docker tag hello3dmcp-server:latest registry.cloudflare.com/<account-id>/hello3dmcp-server:latest
+  npx wrangler containers push hello3dmcp-server:latest
+  ```
+
+  **Option 2: Use Docker Buildx (if available):**
+  ```bash
+  docker buildx build --platform linux/amd64 -t hello3dmcp-server:latest --load .
+  npx wrangler containers push hello3dmcp-server:latest
+  ```
+
 **Note:** 
 - The `.` specifies the current directory (where your Dockerfile is located)
 - The `-p` flag automatically pushes the image to Cloudflare's registry after building
 - The command should be run from your project root directory
+- If you get a platform mismatch error, use Option 1 above
 
 Wrangler outputs a registry URI similar to:
 
@@ -242,6 +262,10 @@ This package provides the `Container` class needed for the Worker proxy.
 
 Create a file named `index.js` at the root of your project. This Worker will proxy requests to your container:
 
+**⚠️ Critical Understanding:** `index.js` is **NOT** part of the Docker container. It's Worker code that runs on Cloudflare's edge and proxies requests to your container. This means:
+- Changes to `index.js` do **NOT** require rebuilding the container
+- Changes to `index.js` only require redeploying the Worker (see Section 15.1 for details)
+
 ```javascript
 import { Container } from "@cloudflare/containers";
 
@@ -249,6 +273,21 @@ import { Container } from "@cloudflare/containers";
 export class MCPContainer extends Container {
   defaultPort = 3000;
   sleepAfter = "5m";
+  
+  // Constructor receives Worker environment (env) as second parameter
+  // We can access Worker vars (from wrangler.jsonc) via env.BROWSER_URL
+  constructor(ctx, env) {
+    super(ctx, env);
+    
+    // Set environment variables that will be passed to the container
+    // envVars is a PROPERTY, not a method - it's used when the container starts
+    const browserUrl = env.BROWSER_URL || 'https://hello3dmcp-frontend.netlify.app';
+    
+    // Set the envVars property (this will be passed to the container when it starts)
+    this.envVars = {
+      BROWSER_URL: browserUrl,
+    };
+  }
 }
 
 // Worker entry point
@@ -443,25 +482,35 @@ When testing with Wrangler Dev, your frontend app should connect to the WebSocke
 
 **Switching Between Local and Netlify Frontend:**
 
-To test with either your local frontend or the Netlify-hosted frontend, simply change the `BROWSER_URL` value in `wrangler.jsonc`:
+**⚠️ For Local Testing (`wrangler dev`): Use `.env` file as the single source of truth**
 
-```jsonc
-"containers": [
-  {
-    "class_name": "MCPContainer",
-    "image": "registry.cloudflare.com/.../hello3dmcp-server:latest",
-    "env": {
-      // For local frontend (e.g., Vite dev server on port 5173):
-      "BROWSER_URL": "http://localhost:5173"
-      
-      // For Netlify-hosted frontend:
-      // "BROWSER_URL": "https://hello3dmcp-frontend.netlify.app"
-    }
-  }
-]
+Wrangler automatically reads `.env` and makes those variables available to your Worker. Edit the **`.env` file**:
+
+```bash
+# In .env file:
+# For local frontend (e.g., Vite dev server on port 5173):
+BROWSER_URL=http://localhost:5173
+
+# For Netlify-hosted frontend:
+# BROWSER_URL=https://hello3dmcp-frontend.netlify.app
 ```
 
-**Important:** After changing `BROWSER_URL`, you must **restart `wrangler dev`** for the change to take effect (the container needs to restart with the new environment variable).
+**Why `.env`?**
+- `.env` is the **single source of truth** for local development
+- Wrangler reads `.env` automatically when running `wrangler dev`
+- `.env` takes precedence over `wrangler.jsonc` → `vars` for local development
+- Simple: one file to edit, no confusion
+
+**For Production Deployment:**
+- `.env` files are **NOT** deployed to Cloudflare
+- Use `wrangler.jsonc` → `vars` for production:
+  ```jsonc
+  "vars": {
+    "BROWSER_URL": "https://hello3dmcp-frontend.netlify.app"
+  }
+  ```
+
+**Important:** After changing `BROWSER_URL` in `.env`, you must **restart `wrangler dev`** for the change to take effect (the container needs to restart with the new environment variable).
 
 **When to use:** Use this when you want to test the complete Cloudflare setup before deploying, or when debugging Worker/Container integration issues.
 
@@ -532,23 +581,56 @@ npx @modelcontextprotocol/inspector --transport http --server-url http://localho
 
 Your frontend app needs to know which WebSocket URL to connect to. Configure this via environment variables:
 
-**For Wrangler Dev Testing:**
+**Important:** The frontend runs in your browser (even if hosted on Netlify), so it **can** connect to `localhost` URLs when testing locally.
+
+#### For Wrangler Dev Testing (Local Testing)
+
+When testing with `npx wrangler dev`, the WebSocket is available at `ws://localhost:8787/ws`:
+
+1. **Update Netlify environment variable:**
+   - Go to Netlify Dashboard → Site Settings → Environment Variables
+   - Set `VITE_WS_URL` to: `ws://localhost:8787/ws`
+   - **Redeploy** your Netlify site after changing the variable
+
+2. **Open the Netlify site in your browser** - it will connect to your local `wrangler dev` server
+
+**Note:** The frontend JavaScript is built at deploy time with the `VITE_WS_URL` value baked in. After changing the environment variable, you must **redeploy** for the change to take effect.
+
+#### For Docker Direct Testing (Default Mode)
+
+If testing with Docker directly (not through Wrangler):
+
 ```bash
 # Frontend environment variable
-VITE_WEBSOCKET_URL=ws://localhost:8787/ws
+VITE_WS_URL=ws://localhost:3000/ws
 ```
 
-**For Docker Direct Testing (Default Mode):**
+#### For Docker Direct Testing (Legacy Mode)
+
+If using separate WebSocket port:
+
 ```bash
 # Frontend environment variable
-VITE_WEBSOCKET_URL=ws://localhost:3000/ws
+VITE_WS_URL=ws://localhost:3001
 ```
 
-**For Docker Direct Testing (Legacy Mode):**
-```bash
-# Frontend environment variable
-VITE_WEBSOCKET_URL=ws://localhost:3001
-```
+#### For Production Deployment
+
+When deploying to Cloudflare production, configure Netlify to connect to the production WebSocket URL:
+
+1. **Deploy to Cloudflare:**
+   ```bash
+   npx wrangler deploy
+   ```
+
+2. **Get your production WebSocket URL:**
+   - Without custom domain: `wss://hello3dmcp-cloudflare.<subdomain>.workers.dev/ws`
+   - With custom domain: `wss://mcp.yourdomain.com/ws`
+
+3. **Update Netlify environment variable:**
+   - Key: `VITE_WS_URL`
+   - Value: Your production WebSocket URL (use `wss://` for secure WebSocket)
+   - **Redeploy** your Netlify site
 
 **Note:** The exact environment variable name depends on your frontend framework. For Vite, use `VITE_` prefix. Adjust based on your build system.
 
@@ -638,6 +720,21 @@ const container = env.MCP_CONTAINER.get(id);
 3. Verify the image exists: `docker images | grep hello3dmcp-server`
 4. Check that `FORCE_HTTP_MODE=true` is set in the Dockerfile
 5. If you see platform architecture errors, rebuild with `--platform linux/amd64` flag
+
+### Issue: Changes not appearing after deployment
+
+**Problem:** You made changes but they're not showing up. You're not sure if you need to rebuild the container or just redeploy.
+
+**Solution:** See **Section 15.1: When to Rebuild vs When to Redeploy** for a complete guide. Quick reference:
+
+- **Changed `index.js` or `wrangler.jsonc`?** → Just redeploy: `npx wrangler deploy` (or restart `wrangler dev`)
+- **Changed `server.js` or `package.json`?** → Rebuild container AND redeploy:
+  ```bash
+  npx wrangler containers build . -t hello3dmcp-server:latest
+  npx wrangler deploy
+  ```
+
+**Common mistake:** Rebuilding the container when you only changed `index.js` (Worker code). `index.js` is NOT in the container, so rebuilding won't help.
 
 ---
 
@@ -798,6 +895,25 @@ Container (port 3000 internally)
 
 ## 13. Environment Variables
 
+**⚠️ CRITICAL: `.env` File Takes Precedence EVERYWHERE (Where It's Available)**
+
+**The Golden Rule:** `.env` file takes precedence over `wrangler.jsonc` → `vars` **whenever `.env` is available**.
+
+**When `.env` IS Available (Local Development):**
+- **`wrangler dev`** → `.env` takes precedence
+- `.env` is the **single source of truth** for local development
+- Wrangler automatically reads `.env` and makes those variables available to your Worker
+- **Priority:** `.env` > `wrangler.jsonc` → `vars` > System environment variables
+
+**When `.env` is NOT Available (Production Deployment):**
+- **`wrangler deploy`** → `.env` files are **NOT** deployed to Cloudflare
+- `.env` doesn't exist in production, so `wrangler.jsonc` → `vars` is used
+- **For production:** Set environment variables in `wrangler.jsonc` → `vars`
+
+**Summary:**
+- **Local (`wrangler dev`):** `.env` takes precedence → Use `.env` as single source of truth
+- **Production (`wrangler deploy`):** `.env` doesn't exist → Use `wrangler.jsonc` → `vars`
+
 **⚠️ Important: Worker vs Container Environment Variables**
 
 There are two types of environment variables in Cloudflare Workers + Containers:
@@ -956,6 +1072,153 @@ npx wrangler deploy
 # 4. Change env vars? Just edit wrangler.jsonc and redeploy (no rebuild needed)
 # 5. Change server.js? Rebuild container AND redeploy
 ```
+
+---
+
+## 15.1. When to Rebuild vs When to Redeploy: A Critical Distinction
+
+**⚠️ This is one of the most confusing aspects of Cloudflare Containers. Understanding this will save you hours of frustration.**
+
+### The Two Separate Pieces
+
+Your deployment consists of **two completely separate pieces**:
+
+1. **Container Image** (Docker)
+   - Contains: `server.js` + all dependencies
+   - Built from: `Dockerfile`
+   - Stored in: Cloudflare Container Registry
+   - Runs: Your actual MCP server application
+
+2. **Worker Code** (`index.js`)
+   - Contains: The proxy code that forwards requests to the container
+   - Configured by: `wrangler.jsonc`
+   - Runs: On Cloudflare's edge (NOT inside the container)
+   - Deployed: Separately from the container
+
+### When to Rebuild the Container
+
+**You MUST rebuild and push the container image when you change:**
+
+- ✅ `server.js` (your MCP server code)
+- ✅ `package.json` (adding/removing dependencies)
+- ✅ `Dockerfile` (changing container configuration)
+- ✅ Any files that get copied into the container (via `COPY` in Dockerfile)
+- ✅ Build-time environment variables (set in Dockerfile with `ENV`)
+
+**Rebuild commands:**
+```bash
+# Option 1: Build and push in one step (recommended)
+npx wrangler containers build . -t hello3dmcp-server:latest
+
+# Option 2: Build locally, then push separately
+docker build --platform linux/amd64 -t hello3dmcp-server:latest .
+npx wrangler containers push hello3dmcp-server:latest
+```
+
+**After rebuilding:** You still need to redeploy the Worker (see below).
+
+### When to Redeploy the Worker (No Container Rebuild Needed)
+
+**You can just redeploy (no container rebuild) when you change:**
+
+- ✅ `index.js` (Worker proxy code)
+- ✅ `wrangler.jsonc` (configuration, environment variables, routes)
+- ✅ Runtime environment variables (set in `wrangler.jsonc` → `vars` or `containers[].env`)
+
+**Redeploy commands:**
+```bash
+# For local testing
+npx wrangler dev
+
+# For production deployment
+npx wrangler deploy
+```
+
+**Important:** `wrangler dev` reads `index.js` directly from your local filesystem, so changes to `index.js` take effect immediately when you restart `wrangler dev` (no rebuild needed).
+
+### Quick Reference Table
+
+| What You Changed | Rebuild Container? | Redeploy Worker? | Notes |
+|-----------------|-------------------|------------------|-------|
+| `server.js` | ✅ **YES** | ✅ Yes | Container contains server.js |
+| `package.json` | ✅ **YES** | ✅ Yes | Dependencies are installed in container |
+| `Dockerfile` | ✅ **YES** | ✅ Yes | Container definition changed |
+| `index.js` | ❌ No | ✅ **YES** | Worker code, not in container |
+| `wrangler.jsonc` | ❌ No | ✅ **YES** | Configuration file, not in container |
+| `wrangler.jsonc` → `vars.BROWSER_URL` | ❌ No | ✅ **YES** | Runtime env var, passed to container |
+| `wrangler.jsonc` → `containers[].env` | ❌ No | ✅ **YES** | Runtime env var, passed to container |
+
+### Common Scenarios
+
+#### Scenario 1: You changed `index.js` (Worker code)
+```bash
+# NO container rebuild needed!
+# Just restart wrangler dev or redeploy:
+npx wrangler dev
+# OR for production:
+npx wrangler deploy
+```
+
+#### Scenario 2: You changed `server.js` (container code)
+```bash
+# YES, rebuild container:
+npx wrangler containers build . -t hello3dmcp-server:latest
+
+# Then redeploy Worker:
+npx wrangler deploy
+```
+
+#### Scenario 3: You changed `BROWSER_URL` in `wrangler.jsonc`
+```bash
+# NO container rebuild needed!
+# The env var is passed at runtime, not baked into the image
+# Just redeploy:
+npx wrangler deploy
+# OR restart wrangler dev:
+npx wrangler dev
+```
+
+#### Scenario 4: You added a new npm package
+```bash
+# YES, rebuild container (package.json changed):
+npm install <package-name>
+npx wrangler containers build . -t hello3dmcp-server:latest
+
+# Then redeploy:
+npx wrangler deploy
+```
+
+### Why This Confusion Exists
+
+The confusion comes from the fact that:
+
+1. **`index.js` is NOT in the container** - It's Worker code that runs on Cloudflare's edge
+2. **`server.js` IS in the container** - It's your application code
+3. **Environment variables can be set in two places:**
+   - Build-time (in `Dockerfile` with `ENV`) → Requires rebuild
+   - Runtime (in `wrangler.jsonc` with `vars` or `containers[].env`) → No rebuild needed
+
+### How to Verify What's in Your Container
+
+To see what's actually in your container image:
+```bash
+# Inspect the container image
+docker inspect hello3dmcp-server:latest
+
+# Or run it and check the filesystem
+docker run --rm -it hello3dmcp-server:latest sh
+# Inside the container:
+ls -la
+cat server.js  # This file IS in the container
+cat index.js  # This file is NOT in the container (it's Worker code)
+```
+
+### Summary
+
+**Remember:**
+- **Container = `server.js` + dependencies** (built from Dockerfile)
+- **Worker = `index.js`** (deployed separately)
+- **If you're not sure:** Ask yourself "Is this file copied into the container by the Dockerfile?" If yes → rebuild. If no → just redeploy.
 
 ---
 

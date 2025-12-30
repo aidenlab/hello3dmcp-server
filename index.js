@@ -4,11 +4,43 @@ import { Container } from "@cloudflare/containers";
 export class MCPContainer extends Container {
   defaultPort = 3000;
   sleepAfter = "5m";
+  
+  // Constructor receives Worker environment (env) as second parameter
+  // We can access Worker vars (from wrangler.jsonc) via env.BROWSER_URL
+  constructor(ctx, env) {
+    super(ctx, env);
+    
+    // Set environment variables that will be passed to the container
+    // envVars is a PROPERTY, not a method - it's used when the container starts
+    // Get BROWSER_URL from Worker vars (set in wrangler.jsonc vars section)
+    const browserUrl = env.BROWSER_URL || 'https://hello3dmcp-frontend.netlify.app';
+    
+    // Debug logging
+    console.log('[MCPContainer] Constructor called with env:', {
+      BROWSER_URL_from_worker: env.BROWSER_URL,
+      BROWSER_URL_final: browserUrl,
+      all_env_keys: Object.keys(env)
+    });
+    
+    // Set the envVars property (this will be passed to the container when it starts)
+    this.envVars = {
+      BROWSER_URL: browserUrl,
+    };
+    
+    // Additional debug logging
+    console.log('[MCPContainer] envVars property set:', this.envVars);
+  }
 }
 
 // Worker entry point
 export default {
   async fetch(request, env) {
+    // Debug: Log environment variables
+    console.log('[Worker] Environment variables:', {
+      BROWSER_URL: env.BROWSER_URL,
+      all_vars: Object.keys(env).filter(k => k.startsWith('BROWSER') || k === 'MCP_CONTAINER')
+    });
+    
     // Get or create a container instance using a Durable Object ID
     // Use idFromName to create a consistent ID for the container
     const id = env.MCP_CONTAINER.idFromName("default");
